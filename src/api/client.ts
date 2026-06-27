@@ -15,10 +15,14 @@ function withByDept(url: string): string {
 }
 
 export async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
+  const { headers: initHeaders, ...restInit } = init ?? {};
   const res = await fetch(`/api${withByDept(url)}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
+    ...restInit,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(initHeaders as Record<string, string> | undefined),
+    },
   });
 
   if (!res.ok) {

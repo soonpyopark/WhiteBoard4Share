@@ -4,6 +4,7 @@ import { getRemotePeerCount } from './doc-manager.ts';
 import { diffSceneSnapshots } from './scene-events.ts';
 import {
   isSceneEmpty,
+  isSnapshotEmpty,
   mergeSceneToDoc,
   readSceneFromDoc,
   type SceneSnapshot,
@@ -109,6 +110,11 @@ export async function syncEngineFromYdocDelta(
   if (!previous) {
     await engine.applyRemoteScene(next.paths, next.images, next.texts);
     return cloneSceneSnapshot(next);
+  }
+
+  if (isSnapshotEmpty(next) && !isSnapshotEmpty(previous)) {
+    await engine.applyRemoteScene([], [], []);
+    return { paths: [], images: [], texts: [] };
   }
 
   const { upserts, deletes } = diffSceneSnapshots(previous, next);

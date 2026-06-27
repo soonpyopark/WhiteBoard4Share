@@ -42,7 +42,14 @@ export function readSceneFromDoc(ydoc: Y.Doc): SceneSnapshot {
 }
 
 export function isSceneEmpty(ydoc: Y.Doc): boolean {
-  const scene = readSceneFromDoc(ydoc);
+  return (
+    getPathsMap(ydoc).size === 0 &&
+    getImagesMap(ydoc).size === 0 &&
+    getTextsMap(ydoc).size === 0
+  );
+}
+
+export function isSnapshotEmpty(scene: SceneSnapshot): boolean {
   return scene.paths.length === 0 && scene.images.length === 0 && scene.texts.length === 0;
 }
 
@@ -84,6 +91,11 @@ export function mergeSceneToDoc(ydoc: Y.Doc, scene: SceneSnapshot): void {
 }
 
 export function writeSceneToDoc(ydoc: Y.Doc, scene: SceneSnapshot): void {
+  if (isSnapshotEmpty(scene)) {
+    clearSceneInDoc(ydoc);
+    return;
+  }
+
   ydoc.transact(() => {
     const pathsMap = getPathsMap(ydoc);
     const imagesMap = getImagesMap(ydoc);
@@ -110,7 +122,11 @@ export function writeSceneToDoc(ydoc: Y.Doc, scene: SceneSnapshot): void {
 }
 
 export function clearSceneInDoc(ydoc: Y.Doc): void {
-  writeSceneToDoc(ydoc, { paths: [], images: [], texts: [] });
+  ydoc.transact(() => {
+    getPathsMap(ydoc).clear();
+    getImagesMap(ydoc).clear();
+    getTextsMap(ydoc).clear();
+  }, LOCAL_ORIGIN);
 }
 
 export function applySceneEventsToDoc(

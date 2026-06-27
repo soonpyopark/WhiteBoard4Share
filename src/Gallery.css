@@ -457,11 +457,19 @@
   border-color: #4ade80;
 }
 
+.share-link-dialog-hint {
+  margin-bottom: 0.75rem;
+}
+
 .share-link-dialog-url {
   word-break: break-all;
   color: #2563eb;
   font-size: 0.8125rem;
   line-height: 1.5;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  margin-bottom: 1.25rem;
 }
 
 .card-title-btn {

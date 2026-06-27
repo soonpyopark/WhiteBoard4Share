@@ -75,7 +75,9 @@ export function attachYdocMirror(ydoc: Y.Doc, engine: DrawingEngine): YdocMirror
   const onSceneChange = (event: Y.YMapEvent<unknown>, transaction: Y.Transaction): void => {
     if (transaction.origin === LOCAL_ORIGIN) return;
     const changeCount = event.changes.keys.size + event.changes.deleted.size;
-    scheduleSync(changeCount >= BULK_MAP_CHANGE_THRESHOLD);
+    const massDelete =
+      event.changes.keys.size === 0 && event.changes.deleted.size >= BULK_MAP_CHANGE_THRESHOLD;
+    scheduleSync(massDelete || changeCount >= BULK_MAP_CHANGE_THRESHOLD);
   };
 
   pathsMap.observe(onSceneChange);

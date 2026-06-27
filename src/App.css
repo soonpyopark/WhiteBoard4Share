@@ -29,19 +29,11 @@
   font-size: 0.875rem;
 }
 
-/* ── Editor toolbar (responsive grid; tools wrap before collab on narrow) ── */
+/* ── Editor toolbar (row1: title/actions; row2: tools only) ── */
 .editor-toolbar {
-  container-type: inline-size;
-  container-name: editor-toolbar;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    'leading leading'
-    'status status'
-    'center center';
-  align-items: center;
-  column-gap: 0.75rem;
-  row-gap: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  row-gap: 0;
   padding: 0.35rem 1rem;
   min-height: 48px;
   background: #ffffff;
@@ -51,103 +43,140 @@
   z-index: 10;
 }
 
-.editor-toolbar__leading {
-  grid-area: leading;
+.editor-toolbar__top {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  row-gap: 0.35rem;
+}
+
+.editor-toolbar__leading {
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.5rem;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
 .editor-toolbar__title {
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  padding-right: 0.625rem;
+  flex: 0 0 calc(var(--title-slot-chars, 13) * 1em);
+  width: calc(var(--title-slot-chars, 13) * 1em);
+  font-size: 0.875rem;
+  box-sizing: content-box;
+}
+
+.editor-toolbar__tools-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(100% + 2rem);
+  margin-left: -1rem;
+  margin-right: -1rem;
+  margin-top: 0.35rem;
+  padding: 0.35rem 1rem 0;
+  border-top: 8px solid #e2e6ed;
 }
 
 .editor-toolbar__center {
-  grid-area: center;
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  margin: 0 auto;
 }
 
 .editor-toolbar__tools {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 0.625rem;
-  min-width: max-content;
+  row-gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.editor-toolbar__tools .history-group {
+  flex: 0 0 auto;
+}
+
+.editor-toolbar__tools .toolbar-section--tools {
+  flex: 0 0 auto;
 }
 
 .editor-toolbar__trailing {
-  grid-area: status;
-  display: flex;
-  flex-wrap: nowrap;
+  display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   column-gap: 0.625rem;
   row-gap: 0.35rem;
-  width: 100%;
+  flex: 0 0 auto;
   min-width: 0;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  margin-left: auto;
+}
+
+.editor-toolbar__meta {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  column-gap: 0.625rem;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .editor-toolbar__collab {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.editor-toolbar__actions {
-  flex: 0 0 auto;
-  display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-start;
-  gap: 0.5rem;
-  min-width: 0;
 }
 
-@container editor-toolbar (min-width: 960px) {
-  .editor-toolbar {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    grid-template-areas: 'leading center trailing';
-  }
+.editor-toolbar__buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  row-gap: 0.35rem;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
 
-  .editor-toolbar__trailing {
-    grid-area: trailing;
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    justify-content: flex-end;
-    column-gap: 0.5rem;
-    row-gap: 0.35rem;
-    width: auto;
-    min-width: 0;
-    justify-self: end;
-    overflow-x: visible;
-  }
+.editor-toolbar__buttons-leading,
+.editor-toolbar__buttons-trailing {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
 
-  .editor-toolbar__collab {
-    flex: 0 0 auto;
-  }
+.editor-toolbar .toolbar-section,
+.editor-toolbar .tool-group,
+.editor-toolbar .history-group {
+  flex-wrap: nowrap;
+}
 
-  .editor-toolbar__actions {
-    flex: 0 0 auto;
-  }
+.editor-toolbar .collab-status {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
 
-  .editor-toolbar__center {
-    justify-self: center;
-    overflow-x: visible;
-  }
+.editor-toolbar .tool-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.editor-toolbar .action-btn {
+  flex-shrink: 0;
 }
 
 .back-btn {
@@ -177,12 +206,14 @@
 }
 
 .editor-doc-title {
-  display: block;
+  position: relative;
+  display: flex;
+  align-items: center;
   width: 100%;
   max-width: 100%;
   height: 32px;
   line-height: 32px;
-  font-size: 0.875rem;
+  font-size: inherit;
   font-weight: 600;
   color: #323130;
   border: none;
@@ -191,9 +222,54 @@
   border-radius: 6px;
   cursor: text;
   white-space: nowrap;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.editor-doc-title__text {
+  display: block;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-align: left;
+}
+
+.editor-doc-title__tooltip {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.4rem 0.65rem;
+  border-radius: 8px;
+  background: #323130;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.15s,
+    visibility 0.15s;
+  z-index: 30;
+}
+
+.editor-doc-title__tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #323130;
+}
+
+.editor-doc-title:hover .editor-doc-title__tooltip,
+.editor-doc-title:focus-visible .editor-doc-title__tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .editor-doc-title:hover {
@@ -203,15 +279,13 @@
 .editor-doc-title-input {
   display: block;
   width: 100%;
-  max-width: 100%;
   height: 32px;
-  font-size: 0.875rem;
+  font-size: inherit;
   font-weight: 600;
   color: #323130;
   border: 1px solid #4a6cf7;
   border-radius: 6px;
   padding: 0 0.5rem;
-  min-width: 0;
   outline: none;
   box-sizing: border-box;
   box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.15);
@@ -1198,6 +1272,14 @@
   .editor-toolbar {
     gap: 0.5rem;
     padding: 0.35rem 0.625rem;
+  }
+
+  .editor-toolbar__tools-row {
+    width: calc(100% + 1.25rem);
+    margin-left: -0.625rem;
+    margin-right: -0.625rem;
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
   }
 
   .editor-toolbar__title {

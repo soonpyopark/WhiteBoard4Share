@@ -144,7 +144,8 @@ export function EditorView({
 
   const persist = useCallback(async (options?: { forceThumbnail?: boolean }) => {
     const engine = engineRef.current;
-    if (!engine || !isDirtyRef.current) return;
+    if (!engine) return;
+    if (!isDirtyRef.current && !options?.forceThumbnail) return;
 
     const generation = ++saveGenerationRef.current;
     setSaveStatus('saving');
@@ -172,7 +173,8 @@ export function EditorView({
     if (generation !== saveGenerationRef.current) return;
 
     try {
-      const doc = await saveWhiteboard(whiteboardId, { title, paths, images, texts, thumbnail }, shareToken);
+      const token = shareToken ?? docRef.current?.shareToken;
+      const doc = await saveWhiteboard(whiteboardId, { title, paths, images, texts, thumbnail }, token);
       if (generation !== saveGenerationRef.current) return;
       docRef.current = doc;
       isDirtyRef.current = false;
@@ -337,17 +339,33 @@ export function EditorView({
     const engine = engineRef.current;
     if (!engine) return;
     engine.clear();
-    if (collab.isReady) {
-      collab.markUnsharedChanges();
-    }
     isDirtyRef.current = true;
-    scheduleSave();
     setSelectedIds([]);
     setClearConfirmOpen(false);
+
+    void (async () => {
+      if (collab.isReady) {
+        collab.shareScene();
+      } else {
+        collab.markUnsharedChanges();
+      }
+      await flushPersist({ forceThumbnail: true });
+    })();
   };
 
+  const flushPersist = useCallback(async (options?: { forceThumbnail?: boolean }) => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    await persistRef.current(options);
+  }, []);
+
   const handleShare = () => {
-    collab.shareScene();
+    void (async () => {
+      await flushPersist({ forceThumbnail: true });
+      collab.shareScene();
+    })();
   };
 
   const handleClearRequest = () => {
@@ -435,11 +453,7 @@ export function EditorView({
   };
 
   const handleBack = async () => {
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    await persistRef.current({ forceThumbnail: true });
+    await flushPersist({ forceThumbnail: true });
     onBack();
   };
 
