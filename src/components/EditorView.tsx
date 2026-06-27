@@ -3,6 +3,7 @@ import { fetchWhiteboard, renameWhiteboard, saveWhiteboard } from '../api/whiteb
 import { setApiByDept } from '../api/client';
 import { CollabStatus } from './CollabStatus';
 import { DrawingCanvas } from './DrawingCanvas';
+import { DrawingToolsBar } from './DrawingToolsBar';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { MadeByCredit } from './MadeByCredit';
 import { Toolbar } from './Toolbar';
@@ -492,15 +493,7 @@ export function EditorView({
         draftTitle={draftTitle}
         titleInputRef={titleInputRef}
         saveStatus={saveStatus}
-        tool={tool}
-        drawSettings={drawSettings}
-        eraserSettings={eraserSettings}
-        textSettings={textSettings}
-        drawOptionsOpen={drawOptionsOpen}
-        textOptionsPlacement={textOptionsPlacement}
         hasSelection={selectedIds.length > 0}
-        canUndo={canUndo}
-        canRedo={canRedo}
         onBack={() => void handleBack()}
         showBackButton={showBackButton}
         onStartEditTitle={startEditTitle}
@@ -510,14 +503,6 @@ export function EditorView({
         onExportImage={handleExportImage}
         onShare={handleShare}
         shareDisabled={!collab.isReady || !collab.isWsConnected || !collab.isSynced}
-        onAttachImage={() => attachImageRef.current?.()}
-        onToolChange={handleToolChange}
-        onDrawSettingsChange={handleDrawSettingsChange}
-        onEraserSettingsChange={handleEraserSettingsChange}
-        onTextSettingsChange={handleTextSettingsChange}
-        onDrawOptionsClose={() => setDrawOptionsOpen(false)}
-        onUndo={() => void handleUndo()}
-        onRedo={() => void handleRedo()}
         onDelete={handleDelete}
         onClear={handleClearRequest}
         collabStatus={
@@ -543,7 +528,26 @@ export function EditorView({
       />
 
       <main className="workspace">
-        <DrawingCanvas
+        <div className="workspace-canvas-area">
+          <DrawingToolsBar
+            tool={tool}
+            drawSettings={drawSettings}
+            eraserSettings={eraserSettings}
+            textSettings={textSettings}
+            drawOptionsOpen={drawOptionsOpen}
+            textOptionsPlacement={textOptionsPlacement}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            onToolChange={handleToolChange}
+            onAttachImage={() => attachImageRef.current?.()}
+            onDrawSettingsChange={handleDrawSettingsChange}
+            onEraserSettingsChange={handleEraserSettingsChange}
+            onTextSettingsChange={handleTextSettingsChange}
+            onDrawOptionsClose={() => setDrawOptionsOpen(false)}
+            onUndo={() => void handleUndo()}
+            onRedo={() => void handleRedo()}
+          />
+          <DrawingCanvas
           key={whiteboardId}
           tool={tool}
           drawSettings={drawSettings}
@@ -569,6 +573,7 @@ export function EditorView({
           onCursorClear={presence.clearCursor}
           onEngineInstance={handleEngineInstance}
         />
+        </div>
       </main>
 
       <MadeByCredit hint={getCanvasHint(tool)} />

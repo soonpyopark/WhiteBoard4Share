@@ -1,20 +1,14 @@
-import { useCallback, useEffect, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   copyWhiteboard,
-  createShareLink,
   createWhiteboard,
   deleteWhiteboard,
   fetchWhiteboards,
   renameWhiteboard,
-  reorderWhiteboards,
-  revokeShareLink,
-  updateShareVisibility,
 } from '../api/whiteboards';
 import type { WhiteboardSummary } from '../types/whiteboard';
-import { GalleryAuthBar } from './GalleryAuthBar';
-import { HomeButton } from './HomeButton';
 import { WhiteboardCard } from './WhiteboardCard';
-import { useDeptSession } from '../context/DeptSessionContext';
+import { HomeButton } from './HomeButton';
 
 interface GalleryViewProps {
   onOpen: (id: string) => void;
@@ -22,47 +16,14 @@ interface GalleryViewProps {
   onAppHome?: () => void;
 }
 
-function moveBoard(
-  boards: WhiteboardSummary[],
-  draggedId: string,
-  targetId: string,
-): WhiteboardSummary[] | null {
-  if (draggedId === targetId) return null;
-
-  const fromIndex = boards.findIndex((board) => board.id === draggedId);
-  const toIndex = boards.findIndex((board) => board.id === targetId);
-  if (fromIndex < 0 || toIndex < 0) return null;
-
-  const next = [...boards];
-  const [item] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, item);
-  return next;
-}
-
 export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
-  const {
-    authenticated,
-    selectedDept,
-    canCreateWhiteboard,
-    loading: sessionLoading,
-  } = useDeptSession();
-
   const [boards, setBoards] = useState<WhiteboardSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!authenticated) {
-      setBoards([]);
-      setLoading(false);
-      return;
-    }
-
     try {
-      setLoading(true);
       setError(null);
       const list = await fetchWhiteboards();
       setBoards(list);
@@ -71,58 +32,11 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [authenticated, selectedDept]);
+  }, []);
 
   useEffect(() => {
-    if (sessionLoading) return;
-    void load();
-  }, [load, sessionLoading]);
-
-  const persistOrder = useCallback(async (nextBoards: WhiteboardSummary[]) => {
-    try {
-      const ordered = await reorderWhiteboards(nextBoards.map((board) => board.id));
-      setBoards(ordered);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '순서 저장에 실패했습니다');
-      await load();
-    }
+    load();
   }, [load]);
-
-  const handleDragStart = useCallback((boardId: string) => {
-    setDraggingId(boardId);
-    setDragOverId(null);
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggingId(null);
-    setDragOverId(null);
-  }, []);
-
-  const handleDragOver = useCallback(
-    (event: DragEvent<HTMLElement>, boardId: string) => {
-      if (!draggingId || draggingId === boardId) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      setDragOverId(boardId);
-    },
-    [draggingId],
-  );
-
-  const handleDrop = useCallback(
-    (event: DragEvent<HTMLElement>, targetId: string) => {
-      event.preventDefault();
-      if (!draggingId) return;
-
-      const next = moveBoard(boards, draggingId, targetId);
-      setDraggingId(null);
-      setDragOverId(null);
-      if (!next) return;
-
-      setBoards(next);
-      void persistOrder(next);
-    },
-    [boards, draggingId, persistOrder],
-  );
 
   const handleCreate = async () => {
     if (creating) return;
@@ -161,57 +75,17 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
 
   const handleCopy = async (id: string) => {
     try {
-      await copyWhiteboard(id);
-      await load();
+      const doc = await copyWhiteboard(id);
+      const summary: WhiteboardSummary = {
+        id: doc.id,
+        title: doc.title,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+        thumbnail: doc.thumbnail,
+      };
+      setBoards((prev) => [summary, ...prev]);
     } catch (err) {
       setError(err instanceof Error ? err.message : '복사에 실패했습니다');
-    }
-  };
-
-  const handleCreateShareLink = async (id: string) => {
-    try {
-      const { shareToken } = await createShareLink(id);
-      setBoards((prev) =>
-        prev.map((board) => (board.id === id ? { ...board, shareToken } : board)),
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '공유 링크 생성에 실패했습니다');
-    }
-  };
-
-  const handleRevokeShareLink = async (id: string) => {
-    try {
-      await revokeShareLink(id);
-      setBoards((prev) =>
-        prev.map((board) =>
-          board.id === id ? { ...board, shareToken: undefined } : board,
-        ),
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '공유 링크 해제에 실패했습니다');
-    }
-  };
-
-  const handleUpdateShareVisibility = async (
-    id: string,
-    visibility: { isPrivate: boolean; isViewRestricted: boolean },
-  ) => {
-    try {
-      const updated = await updateShareVisibility(id, visibility);
-      setBoards((prev) =>
-        prev.map((board) =>
-          board.id === id
-            ? {
-                ...board,
-                isPrivate: updated.isPrivate,
-                isViewRestricted: updated.isViewRestricted,
-                updatedAt: updated.updatedAt,
-              }
-            : board,
-        ),
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '공유 설정 저장에 실패했습니다');
     }
   };
 
@@ -232,7 +106,12 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
           </h1>
         </div>
         <div className="gallery-header-actions">
-          <GalleryAuthBar />
+          <button type="button" className="header-icon-btn" title="설정" aria-label="설정">
+            ⚙
+          </button>
+          <button type="button" className="header-avatar" title="프로필" aria-label="프로필">
+            U
+          </button>
         </div>
       </header>
 
@@ -246,69 +125,30 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
           </div>
         )}
 
-        {sessionLoading || loading ? (
+        {loading ? (
           <p className="gallery-loading">불러오는 중…</p>
-        ) : boards.length === 0 && !canCreateWhiteboard ? (
-          <div className="gallery-empty">
-            <p className="gallery-login-hint">
-              등록된 화이트보드가 없습니다.
-              <br />
-              관리자가 생성하면 함께 편집할 수 있습니다.
-            </p>
-          </div>
         ) : (
           <div className="gallery-grid">
-            {canCreateWhiteboard && (
-              <button
-                type="button"
-                className="new-whiteboard-card"
-                onClick={handleCreate}
-                disabled={creating}
-              >
-                <span className="new-card-icon">+</span>
-                <span className="new-card-label">
-                  {creating ? '생성 중…' : '새 화이트보드'}
-                </span>
-              </button>
-            )}
+            <button
+              type="button"
+              className="new-whiteboard-card"
+              onClick={handleCreate}
+              disabled={creating}
+            >
+              <span className="new-card-icon">+</span>
+              <span className="new-card-label">
+                {creating ? '생성 중…' : '새 화이트보드'}
+              </span>
+            </button>
 
             {boards.map((board) => (
               <WhiteboardCard
                 key={board.id}
                 board={board}
                 onOpen={onOpen}
-                onDelete={canCreateWhiteboard ? handleDelete : undefined}
-                onRename={canCreateWhiteboard ? handleRename : undefined}
-                onCopy={canCreateWhiteboard ? handleCopy : undefined}
-                onCreateShareLink={canCreateWhiteboard ? handleCreateShareLink : undefined}
-                onRevokeShareLink={canCreateWhiteboard ? handleRevokeShareLink : undefined}
-                onUpdateShareVisibility={
-                  canCreateWhiteboard ? handleUpdateShareVisibility : undefined
-                }
-                canManage={canCreateWhiteboard}
-                isDragging={draggingId === board.id}
-                isDragOver={dragOverId === board.id && draggingId !== board.id}
-                onDragStart={
-                  canCreateWhiteboard ? () => handleDragStart(board.id) : undefined
-                }
-                onDragEnd={canCreateWhiteboard ? handleDragEnd : undefined}
-                onDragOver={
-                  canCreateWhiteboard
-                    ? (event) => handleDragOver(event, board.id)
-                    : undefined
-                }
-                onDragLeave={
-                  canCreateWhiteboard
-                    ? () => {
-                        if (dragOverId === board.id) {
-                          setDragOverId(null);
-                        }
-                      }
-                    : undefined
-                }
-                onDrop={
-                  canCreateWhiteboard ? (event) => handleDrop(event, board.id) : undefined
-                }
+                onDelete={handleDelete}
+                onRename={handleRename}
+                onCopy={handleCopy}
               />
             ))}
           </div>

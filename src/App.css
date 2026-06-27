@@ -29,11 +29,8 @@
   font-size: 0.875rem;
 }
 
-/* ── Editor toolbar (row1: title/actions; row2: tools only) ── */
+/* ── Editor toolbar (row1: title/actions) ── */
 .editor-toolbar {
-  display: flex;
-  flex-direction: column;
-  row-gap: 0;
   padding: 0.35rem 1rem;
   min-height: 48px;
   background: #ffffff;
@@ -66,47 +63,6 @@
   width: calc(var(--title-slot-chars, 13) * 1em);
   font-size: 0.875rem;
   box-sizing: content-box;
-}
-
-.editor-toolbar__tools-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: calc(100% + 2rem);
-  margin-left: -1rem;
-  margin-right: -1rem;
-  margin-top: 0.35rem;
-  padding: 0.35rem 1rem 0;
-  border-top: 8px solid #e2e6ed;
-}
-
-.editor-toolbar__center {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  margin: 0 auto;
-}
-
-.editor-toolbar__tools {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.625rem;
-  row-gap: 0.35rem;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.editor-toolbar__tools .history-group {
-  flex: 0 0 auto;
-}
-
-.editor-toolbar__tools .toolbar-section--tools {
-  flex: 0 0 auto;
 }
 
 .editor-toolbar__trailing {
@@ -160,7 +116,10 @@
 
 .editor-toolbar .toolbar-section,
 .editor-toolbar .tool-group,
-.editor-toolbar .history-group {
+.editor-toolbar .history-group,
+.canvas-tools-bar .toolbar-section,
+.canvas-tools-bar .tool-group,
+.canvas-tools-bar .history-group {
   flex-wrap: nowrap;
 }
 
@@ -170,7 +129,7 @@
   text-overflow: clip;
 }
 
-.editor-toolbar .tool-btn {
+.canvas-tools-bar .tool-btn {
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -896,6 +855,70 @@
   overscroll-behavior: none;
 }
 
+.workspace-canvas-area {
+  container-type: inline-size;
+  container-name: workspace-canvas;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+}
+
+.canvas-tools-bar {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  max-width: calc(100% - 1.5rem);
+  pointer-events: none;
+}
+
+.canvas-tools-bar__inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  row-gap: 0.35rem;
+  padding: 0.25rem;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.06);
+  pointer-events: auto;
+}
+
+.canvas-tools-bar .history-group {
+  flex: 0 0 auto;
+}
+
+.canvas-tools-bar .toolbar-section--tools {
+  flex: 0 0 auto;
+}
+
+@container workspace-canvas (max-width: 420px) {
+  .canvas-tools-bar__inner {
+    flex-direction: column;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .canvas-tools-bar .toolbar-section--tools {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .canvas-tools-bar .tool-group {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    justify-content: center;
+  }
+}
+
 .canvas-container {
   flex: 1;
   position: relative;
@@ -1272,14 +1295,6 @@
   .editor-toolbar {
     gap: 0.5rem;
     padding: 0.35rem 0.625rem;
-  }
-
-  .editor-toolbar__tools-row {
-    width: calc(100% + 1.25rem);
-    margin-left: -0.625rem;
-    margin-right: -0.625rem;
-    padding-left: 0.625rem;
-    padding-right: 0.625rem;
   }
 
   .editor-toolbar__title {

@@ -155,4 +155,3 @@ npm run electron:dev  # Electron 로컬 실행 (개발용)
 배포·사용 관련 안내 및 업데이트는 아래 블로그에서 확인할 수 있습니다.
 
 **[https://note4all.tistory.com](https://note4all.tistory.com)**
-# WhiteBoard4Share
