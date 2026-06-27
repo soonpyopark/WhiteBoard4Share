@@ -10,7 +10,7 @@ if not exist "node_modules\" (
 if not exist "data\" mkdir data
 
 echo Starting WhiteBoard4Share dev server...
-echo Open http://localhost:3005
+echo Open http://localhost:3007
 echo Stop with stop_server.bat or Ctrl+C in the server window.
 echo.
 

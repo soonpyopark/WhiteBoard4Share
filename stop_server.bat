@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-set PORT=3005
+set PORT=3007
 if exist ".env" for /f "tokens=2 delims==" %%P in ('findstr /i /b "PORT=" ".env"') do set PORT=%%P
 
 echo Stopping WhiteBoard4Share server on port %PORT%...

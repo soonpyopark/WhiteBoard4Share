@@ -27,7 +27,8 @@ function copyDirectory(from, to) {
   }
 }
 
-const buildName = `WhiteBoard4Share-${formatTimestamp(new Date())}`;
+const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+const buildName = `WhiteBoard4Share-${pkg.version}-${formatTimestamp(new Date())}`;
 const finalOutDir = path.resolve('exe', buildName);
 const stagingOutDir = path.join(os.tmpdir(), `wb-exe-build-${buildName}`);
 
