@@ -80,37 +80,39 @@ export function GalleryAuthBar() {
 
   return (
     <div className="gallery-auth-bar">
-      <div className="gallery-auth-user">
-        <span className="gallery-auth-label">사용자 :</span>
-        <label className="gallery-auth-field">
-          <span className="sr-only">사용자</span>
-          <input
-            type="text"
-            className="gallery-auth-input gallery-auth-display-name"
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            onBlur={commitDisplayName}
-            aria-label="사용자"
-          />
-        </label>
-      </div>
+      <div className="gallery-auth-identity">
+        <div className="gallery-auth-user">
+          <span className="gallery-auth-label">사용자 :</span>
+          <label className="gallery-auth-field">
+            <span className="sr-only">사용자</span>
+            <input
+              type="text"
+              className="gallery-auth-input gallery-auth-display-name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              onBlur={commitDisplayName}
+              aria-label="사용자"
+            />
+          </label>
+        </div>
 
-      <div className="gallery-auth-dept">
-        <span className="gallery-auth-label">부서 :</span>
-        <label className="gallery-auth-field">
-          <select
-            className="gallery-auth-select"
-            value={selectedDept}
-            onChange={(event) => void handleDeptChange(event.target.value)}
-            aria-label="부서 선택"
-          >
-            {departments.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="gallery-auth-dept">
+          <span className="gallery-auth-label">부서 :</span>
+          <label className="gallery-auth-field">
+            <select
+              className="gallery-auth-select"
+              value={selectedDept}
+              onChange={(event) => void handleDeptChange(event.target.value)}
+              aria-label="부서 선택"
+            >
+              {departments.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       {isAdmin ? (
@@ -171,7 +173,7 @@ export function GalleryAuthBar() {
             </button>
           </div>
           <button type="submit" className="gallery-auth-login" disabled={submitting}>
-            {submitting ? '로그인 중…' : '관리자 로그인'}
+            {submitting ? '로그인 중…' : '로그인'}
           </button>
         </form>
       ) : null}
