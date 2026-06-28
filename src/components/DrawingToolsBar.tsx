@@ -2,7 +2,7 @@ import { useRef, type ReactNode } from 'react';
 import type { Tool } from '../engine/types';
 import { EraserOptionsPopover } from './EraserOptionsPopover';
 import { TextOptionsPopover, type TextOptionsPopoverPlacement } from './TextOptionsPopover';
-import { TableOptionsPopover } from './TableOptionsPopover';
+import { TableOptionsPopover, type TableOptionsPopoverPlacement } from './TableOptionsPopover';
 import { ToolOptionsPopover } from './ToolOptionsPopover';
 import {
   isDrawSettingsTool,
@@ -21,6 +21,7 @@ interface DrawingToolsBarProps {
   tableSettings: TableToolSettings;
   drawOptionsOpen: boolean;
   textOptionsPlacement: TextOptionsPopoverPlacement;
+  tableOptionsPlacement: TableOptionsPopoverPlacement;
   canUndo: boolean;
   canRedo: boolean;
   onToolChange: (tool: Tool) => void;
@@ -173,6 +174,7 @@ export function DrawingToolsBar({
   tableSettings,
   drawOptionsOpen,
   textOptionsPlacement,
+  tableOptionsPlacement,
   canUndo,
   canRedo,
   onToolChange,
@@ -192,7 +194,8 @@ export function DrawingToolsBar({
   const tableAnchorRef = useRef<HTMLButtonElement | null>(null);
   const showEraserOptions = tool === 'eraser' && drawOptionsOpen;
   const showTextOptions = tool === 'text' && drawOptionsOpen && textOptionsPlacement === 'toolbar';
-  const showTableOptions = tool === 'table' && drawOptionsOpen;
+  const showTableOptions =
+    tool === 'table' && drawOptionsOpen && tableOptionsPlacement === 'toolbar';
 
   return (
     <div className="canvas-tools-bar" aria-label="도구">

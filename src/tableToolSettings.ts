@@ -13,8 +13,8 @@ export interface TableToolSettings {
 export const DEFAULT_TABLE_TOOL_SETTINGS: TableToolSettings = {
   fontFamily: 'Malgun Gothic, sans-serif',
   fontSize: 14,
-  color: '#1a1a2e',
-  borderColor: '#605e5c',
+  color: '#4a4a4a',
+  borderColor: '#4a4a4a',
   cellWidth: 80,
   cellHeight: 32,
 };

@@ -21,6 +21,32 @@ export function documentToSummary(doc: WhiteboardDocument): WhiteboardSummary {
   };
 }
 
+/** Yjs 갤러리 이벤트는 썸네일 등이 오래될 수 있음 — API 목록과 병합할 때 사용 */
+export function mergeGalleryBoardRemote(
+  existing: WhiteboardSummary,
+  remote: WhiteboardSummary,
+): WhiteboardSummary {
+  const existingTime = Date.parse(existing.updatedAt);
+  const remoteTime = Date.parse(remote.updatedAt);
+  const remoteIsNewer =
+    Number.isFinite(existingTime) && Number.isFinite(remoteTime) && remoteTime > existingTime;
+
+  return {
+    ...existing,
+    isPrivate: remote.isPrivate ?? existing.isPrivate,
+    isViewRestricted: remote.isViewRestricted ?? existing.isViewRestricted,
+    shareToken: remote.shareToken !== undefined ? remote.shareToken : existing.shareToken,
+    ...(remoteIsNewer
+      ? {
+          title: remote.title,
+          createdAt: remote.createdAt,
+          updatedAt: remote.updatedAt,
+          thumbnail: remote.thumbnail,
+        }
+      : {}),
+  };
+}
+
 function isWhiteboardSummary(value: unknown): value is WhiteboardSummary {
   if (!value || typeof value !== 'object') return false;
   const board = value as WhiteboardSummary;

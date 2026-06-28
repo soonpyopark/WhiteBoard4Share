@@ -26,6 +26,7 @@ import {
   createUniformRowHeights,
   normalizeTableLayout,
 } from '../lib/table/tableDimensions';
+import { applyTableAxisColors } from '../lib/table/tableColors';
 import { applyTextDimensions, measureTextContent, renderText, TEXT_LINE_HEIGHT } from './textRenderer';
 import {
   applyTableDimensions,
@@ -1125,6 +1126,10 @@ export class DrawingEngine {
     layout?: {
       colWidths: number[];
       rowHeights: number[];
+      rowFillColors?: (string | null)[];
+      colFillColors?: (string | null)[];
+      rowTextColors?: (string | null)[];
+      colTextColors?: (string | null)[];
     },
   ): TableObject | null {
     const table = this.tables.find((item) => item.id === id);
@@ -1166,6 +1171,14 @@ export class DrawingEngine {
       table.borderColor = style.borderColor;
       table.cellWidth = style.cellWidth;
       table.cellHeight = style.cellHeight;
+    }
+    if (layout) {
+      applyTableAxisColors(table, {
+        rowFillColors: layout.rowFillColors,
+        colFillColors: layout.colFillColors,
+        rowTextColors: layout.rowTextColors,
+        colTextColors: layout.colTextColors,
+      });
     }
     applyTableDimensions(table);
     this.selectedIds = [table.id];

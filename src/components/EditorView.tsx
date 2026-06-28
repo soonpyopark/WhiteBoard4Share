@@ -8,6 +8,7 @@ import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { MadeByCredit } from './MadeByCredit';
 import { Toolbar } from './Toolbar';
 import type { TextOptionsPopoverPlacement } from './TextOptionsPopover';
+import type { TableOptionsPopoverPlacement } from './TableOptionsPopover';
 import { getCanvasHint } from '../canvasHint';
 import type { DrawingEngine, DeleteSelectedResult } from '../engine/drawingEngine';
 import { generateThumbnail, downloadSceneAsPng } from '../engine/thumbnailRenderer';
@@ -115,6 +116,8 @@ export function EditorView({
   }));
   const [textOptionsPlacement, setTextOptionsPlacement] =
     useState<TextOptionsPopoverPlacement>('toolbar');
+  const [tableOptionsPlacement, setTableOptionsPlacement] =
+    useState<TableOptionsPopoverPlacement>('toolbar');
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmBody, setDeleteConfirmBody] = useState('');
@@ -283,10 +286,8 @@ export function EditorView({
   const handleTableEditStart = useCallback((existing: TableObject | null) => {
     if (existing) {
       setTableSettings(settingsFromTable(existing));
-      setTool('table');
-      setDrawOptionsOpen(true);
-      return;
     }
+    setTool('table');
     setDrawOptionsOpen(false);
   }, []);
 
@@ -301,11 +302,13 @@ export function EditorView({
 
   const handleTableEditEnd = useCallback(() => {
     setDrawOptionsOpen(false);
+    setTableOptionsPlacement('toolbar');
   }, []);
 
   const handleTableAdded = useCallback(() => {
     setTool('select');
     setDrawOptionsOpen(false);
+    setTableOptionsPlacement('toolbar');
   }, []);
 
   const handleTextEditStart = useCallback((existing: TextObject | null) => {
@@ -380,6 +383,7 @@ export function EditorView({
       }
       setTool('table');
       setDrawOptionsOpen(true);
+      setTableOptionsPlacement('toolbar');
       return;
     }
 
@@ -707,6 +711,7 @@ export function EditorView({
             tableSettings={tableSettings}
             drawOptionsOpen={drawOptionsOpen}
             textOptionsPlacement={textOptionsPlacement}
+            tableOptionsPlacement={tableOptionsPlacement}
             canUndo={canUndo}
             canRedo={canRedo}
             onToolChange={handleToolChange}
@@ -724,6 +729,7 @@ export function EditorView({
           tool={tool}
           drawSettings={drawSettings}
           eraserSettings={eraserSettings}
+          whiteboardTitle={title}
           engineRef={engineRef}
           initialPaths={initialPaths}
           initialImages={initialImages}
@@ -732,11 +738,8 @@ export function EditorView({
           textSettings={textSettings}
           tableSettings={tableSettings}
           textOptionsOpen={tool === 'text' && drawOptionsOpen && textOptionsPlacement === 'editor'}
-          tableOptionsOpen={tool === 'table' && drawOptionsOpen}
           onTextSettingsChange={handleTextSettingsChange}
-          onTableSettingsChange={handleTableSettingsChange}
           onTextOptionsClose={() => setDrawOptionsOpen(false)}
-          onTableOptionsClose={() => setDrawOptionsOpen(false)}
           onSelectionChange={handleSelectionChange}
           onPathsChange={handlePathsChange}
           onDeferredDrawChange={handleDeferredDrawChange}

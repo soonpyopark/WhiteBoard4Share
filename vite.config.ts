@@ -6,7 +6,7 @@ import { apiPlugin } from './vite-plugin-api.ts'
 export default defineConfig({
   plugins: [react(), apiPlugin()],
   optimizeDeps: {
-    include: ['yjs', 'y-websocket', 'xlsx'],
+    include: ['yjs', 'y-websocket', 'xlsx-js-style'],
   },
   server: {
     host: HOSTNAME,

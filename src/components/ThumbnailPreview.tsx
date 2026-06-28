@@ -5,10 +5,11 @@ import type { PathObject } from '../engine/types';
 interface ThumbnailPreviewProps {
   paths?: PathObject[];
   thumbnail?: string;
+  cacheKey?: string;
   alt: string;
 }
 
-export function ThumbnailPreview({ paths, thumbnail, alt }: ThumbnailPreviewProps) {
+export function ThumbnailPreview({ paths, thumbnail, cacheKey, alt }: ThumbnailPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -24,7 +25,14 @@ export function ThumbnailPreview({ paths, thumbnail, alt }: ThumbnailPreviewProp
   }, [paths, thumbnail]);
 
   if (thumbnail) {
-    return <img src={thumbnail} alt={alt} className="card-preview-img" />;
+    return (
+      <img
+        key={cacheKey ?? thumbnail.slice(0, 80)}
+        src={thumbnail}
+        alt={alt}
+        className="card-preview-img"
+      />
+    );
   }
 
   return (

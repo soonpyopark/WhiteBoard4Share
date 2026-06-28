@@ -7,6 +7,7 @@ import { exportTableToExcel } from '../lib/table/exportTableToExcel';
 interface SceneLayerMenuProps {
   x: number;
   y: number;
+  whiteboardTitle?: string;
   engineRef: React.MutableRefObject<DrawingEngine | null>;
   onClose: () => void;
   onChange: () => void;
@@ -20,7 +21,15 @@ const MENU_ITEMS: { id: LayerMove; label: string }[] = [
   { id: 'back', label: '맨 아래로' },
 ];
 
-export function SceneLayerMenu({ x, y, engineRef, onClose, onChange, onDeleteRequest }: SceneLayerMenuProps) {
+export function SceneLayerMenu({
+  x,
+  y,
+  whiteboardTitle,
+  engineRef,
+  onClose,
+  onChange,
+  onDeleteRequest,
+}: SceneLayerMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -85,7 +94,7 @@ export function SceneLayerMenu({ x, y, engineRef, onClose, onChange, onDeleteReq
 
   const handleExportExcel = () => {
     if (!selected || !isTableObject(selected)) return;
-    void exportTableToExcel(selected);
+    void exportTableToExcel(selected, whiteboardTitle);
     onClose();
   };
 

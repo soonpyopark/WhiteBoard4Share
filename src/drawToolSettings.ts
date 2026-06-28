@@ -17,6 +17,12 @@ export const HIGHLIGHTER_SIZE_STEP = 5;
 export const HIGHLIGHTER_DEFAULT_SIZE = 20;
 export const HIGHLIGHTER_DEFAULT_OPACITY = 20;
 
+export const PENCIL_PEN_SIZE_MIN = 0.5;
+export const PENCIL_PEN_SIZE_MAX = 6;
+export const PENCIL_PEN_SIZE_STEP = 0.5;
+export const PENCIL_DEFAULT_SIZE = 1.5;
+export const PEN_DEFAULT_SIZE = 2;
+
 export const OPACITY_STEP = 10;
 
 export function snapOpacity(opacity: number): number {
@@ -30,6 +36,12 @@ export function snapHighlighterSize(thickness: number): number {
   return Math.min(HIGHLIGHTER_SIZE_MAX, Math.max(HIGHLIGHTER_SIZE_MIN, snapped));
 }
 
+export function snapPencilPenSize(thickness: number): number {
+  const clamped = Math.min(PENCIL_PEN_SIZE_MAX, Math.max(PENCIL_PEN_SIZE_MIN, thickness));
+  const snapped = Math.round(clamped / PENCIL_PEN_SIZE_STEP) * PENCIL_PEN_SIZE_STEP;
+  return Math.min(PENCIL_PEN_SIZE_MAX, Math.max(PENCIL_PEN_SIZE_MIN, snapped));
+}
+
 export function isDrawSettingsTool(tool: string): tool is DrawSettingsTool {
   return DRAW_SETTINGS_TOOLS.includes(tool as DrawSettingsTool);
 }
@@ -38,8 +50,8 @@ export const DEFAULT_DRAW_COLOR = '#4a4a4a';
 export const DEFAULT_HIGHLIGHTER_COLOR = '#ffeb3b';
 
 export const DEFAULT_DRAW_TOOL_SETTINGS: Record<DrawSettingsTool, DrawToolSettings> = {
-  pencil: { thickness: 2, opacity: 60, color: DEFAULT_DRAW_COLOR, lineEnd: 'plain' },
-  pen: { thickness: 3, opacity: 100, color: DEFAULT_DRAW_COLOR, lineEnd: 'plain' },
+  pencil: { thickness: PENCIL_DEFAULT_SIZE, opacity: 60, color: DEFAULT_DRAW_COLOR, lineEnd: 'plain' },
+  pen: { thickness: PEN_DEFAULT_SIZE, opacity: 100, color: DEFAULT_DRAW_COLOR, lineEnd: 'plain' },
   highlighter: {
     thickness: HIGHLIGHTER_DEFAULT_SIZE,
     opacity: HIGHLIGHTER_DEFAULT_OPACITY,
@@ -78,6 +90,15 @@ export function thicknessToWidths(
     return { baseWidth, minWidth: baseWidth, maxWidth: baseWidth };
   }
 
+  if (tool === 'pencil' || tool === 'pen') {
+    const t = snapPencilPenSize(thickness);
+    return {
+      baseWidth: t,
+      minWidth: Math.max(PENCIL_PEN_SIZE_MIN, t * 0.4),
+      maxWidth: t * 2,
+    };
+  }
+
   const t = Math.min(6, Math.max(1, thickness));
   return {
     baseWidth: t,
@@ -89,6 +110,9 @@ export function thicknessToWidths(
 export function widthsToThickness(tool: DrawTool, path: PathObject): number {
   if (tool === 'highlighter') {
     return snapHighlighterSize(Math.round(path.baseWidth));
+  }
+  if (tool === 'pencil' || tool === 'pen') {
+    return snapPencilPenSize(path.baseWidth);
   }
   return Math.min(6, Math.max(1, Math.round(path.baseWidth)));
 }

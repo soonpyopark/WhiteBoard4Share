@@ -17,7 +17,7 @@ import { SplashOverlay } from './SplashOverlay';
 import { WhiteboardCard } from './WhiteboardCard';
 import { useDeptSession } from '../context/DeptSessionContext';
 import { useGalleryCollab } from '../hooks/useGalleryCollab';
-import { documentToSummary } from '../lib/collab/gallery-sync';
+import { documentToSummary, mergeGalleryBoardRemote } from '../lib/collab/gallery-sync';
 import { canViewWhiteboardInGallery } from '../../shared/auth';
 import { APP_CONFIG } from '../appConfig';
 
@@ -121,12 +121,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
 
         if (index >= 0) {
           return prev.map((item) =>
-            item.id === board.id
-              ? {
-                  ...item,
-                  ...board,
-                }
-              : item,
+            item.id === board.id ? mergeGalleryBoardRemote(item, board) : item,
           );
         }
 

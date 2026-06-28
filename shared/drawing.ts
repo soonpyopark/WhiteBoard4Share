@@ -68,6 +68,10 @@ export interface TableObject {
   fontSize: number;
   color: string;
   borderColor: string;
+  rowFillColors?: (string | null)[];
+  colFillColors?: (string | null)[];
+  rowTextColors?: (string | null)[];
+  colTextColors?: (string | null)[];
   width: number;
   height: number;
   transform: PathTransform;

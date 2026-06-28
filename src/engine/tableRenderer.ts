@@ -10,13 +10,15 @@ import {
   getTableColWidths,
   getTableRowHeights,
 } from '../lib/table/tableDimensions';
+import { getCellFillColor, getCellTextColor } from '../lib/table/tableColors';
 
 export const TABLE_DEFAULT_ROWS = 3;
 export const TABLE_DEFAULT_COLS = 3;
 export const TABLE_CELL_WIDTH = 80;
 export const TABLE_CELL_HEIGHT = 32;
 export const TABLE_CELL_PADDING = 4;
-export const TABLE_BORDER_COLOR = '#605e5c';
+const TABLE_CELL_LINE_HEIGHT = 1.35;
+export const TABLE_BORDER_COLOR = '#4a4a4a';
 export const TABLE_MAX_ROWS = 20;
 export const TABLE_MAX_COLS = 20;
 export const TABLE_MIN_DRAG_PX = 20;
@@ -98,7 +100,7 @@ function worldToTableLocal(
 }
 
 export function renderTable(ctx: CanvasRenderingContext2D, table: TableObject): void {
-  const { transform, fontSize, fontFamily, color, borderColor, cells } = table;
+  const { transform, fontSize, fontFamily, borderColor, cells } = table;
   const colWidths = getTableColWidths(table);
   const rowHeights = getTableRowHeights(table);
 
@@ -114,8 +116,17 @@ export function renderTable(ctx: CanvasRenderingContext2D, table: TableObject): 
   ctx.strokeStyle = borderColor;
   ctx.lineWidth = 1 / deviceScale;
   ctx.lineCap = 'square';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(startX, startY, table.width, table.height);
+
+  for (let row = 0; row < table.rows; row++) {
+    for (let col = 0; col < table.cols; col++) {
+      const cellWidth = colWidths[col] ?? table.cellWidth;
+      const cellHeight = rowHeights[row] ?? table.cellHeight;
+      const cellX = startX + getColOffset(colWidths, col);
+      const cellY = startY + getRowOffset(rowHeights, row);
+      ctx.fillStyle = getCellFillColor(table, row, col);
+      ctx.fillRect(cellX, cellY, cellWidth, cellHeight);
+    }
+  }
 
   const xLines = buildGridLinePositions(startX, colWidths, table.width);
   const yLines = buildGridLinePositions(startY, rowHeights, table.height);
@@ -135,7 +146,6 @@ export function renderTable(ctx: CanvasRenderingContext2D, table: TableObject): 
   }
 
   ctx.font = buildTextFont(fontSize, fontFamily);
-  ctx.fillStyle = color;
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
 
@@ -144,17 +154,40 @@ export function renderTable(ctx: CanvasRenderingContext2D, table: TableObject): 
       const text = cells[row]?.[col] ?? '';
       if (!text) continue;
       const cellWidth = colWidths[col] ?? table.cellWidth;
+      const cellHeight = rowHeights[row] ?? table.cellHeight;
       const cellX = startX + getColOffset(colWidths, col) + TABLE_CELL_PADDING;
       const cellY = startY + getRowOffset(rowHeights, row) + TABLE_CELL_PADDING;
       const maxWidth = cellWidth - TABLE_CELL_PADDING * 2;
-      truncateFillText(ctx, text, cellX, cellY, maxWidth);
+      const maxHeight = cellHeight - TABLE_CELL_PADDING * 2;
+      const lineHeight = fontSize * TABLE_CELL_LINE_HEIGHT;
+      ctx.fillStyle = getCellTextColor(table, row, col);
+      fillCellText(ctx, text, cellX, cellY, maxWidth, maxHeight, lineHeight);
     }
   }
 
   ctx.restore();
 }
 
-function truncateFillText(
+function fillCellText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  maxHeight: number,
+  lineHeight: number,
+): void {
+  const lines = text.split('\n');
+  let lineY = y;
+
+  for (const line of lines) {
+    if (lineY + lineHeight > y + maxHeight + 0.5) break;
+    truncateFillLine(ctx, line, x, lineY, maxWidth);
+    lineY += lineHeight;
+  }
+}
+
+function truncateFillLine(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number,

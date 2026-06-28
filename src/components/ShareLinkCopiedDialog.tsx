@@ -6,6 +6,19 @@ interface ShareLinkCopiedDialogProps {
   onClose: () => void;
 }
 
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (!text) return false;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    /* clipboard may fail on insecure contexts */
+  }
+
+  return false;
+}
+
 export function ShareLinkCopiedDialog({ open, url, onClose }: ShareLinkCopiedDialogProps) {
   const urlInputRef = useRef<HTMLInputElement>(null);
 
@@ -16,6 +29,16 @@ export function ShareLinkCopiedDialog({ open, url, onClose }: ShareLinkCopiedDia
     input.focus();
     input.select();
   }, [open, url]);
+
+  const handleCopyLink = async () => {
+    const copied = await copyTextToClipboard(url);
+    if (copied) return;
+
+    const input = urlInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  };
 
   if (!open) return null;
 
@@ -45,6 +68,13 @@ export function ShareLinkCopiedDialog({ open, url, onClose }: ShareLinkCopiedDia
           onClick={(e) => e.currentTarget.select()}
         />
         <div className="modal-actions">
+          <button
+            type="button"
+            className="modal-btn modal-btn--secondary"
+            onClick={() => void handleCopyLink()}
+          >
+            링크복사
+          </button>
           <button type="button" className="modal-btn modal-btn--primary" onClick={onClose}>
             확인
           </button>

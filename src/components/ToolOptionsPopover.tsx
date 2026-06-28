@@ -8,8 +8,12 @@ import {
   HIGHLIGHTER_SIZE_STEP,
   MAIN_COLOR_PALETTE,
   OPACITY_STEP,
+  PENCIL_PEN_SIZE_MAX,
+  PENCIL_PEN_SIZE_MIN,
+  PENCIL_PEN_SIZE_STEP,
   QUICK_COLORS,
   snapHighlighterSize,
+  snapPencilPenSize,
   snapOpacity,
   type DrawSettingsTool,
   type DrawToolSettings,
@@ -162,12 +166,27 @@ export function ToolOptionsPopover({ tool, settings, onChange, anchorRef, onClos
   const sliderFill = (value: number, min: number, max: number) =>
     `${((value - min) / (max - min)) * 100}%`;
 
-  const thicknessMin = isHighlighter ? HIGHLIGHTER_SIZE_MIN : 1;
-  const thicknessMax = isHighlighter ? HIGHLIGHTER_SIZE_MAX : 6;
-  const thicknessStep = isHighlighter ? HIGHLIGHTER_SIZE_STEP : 1;
+  const isPencilOrPen = tool === 'pencil' || tool === 'pen';
+  const thicknessMin = isHighlighter
+    ? HIGHLIGHTER_SIZE_MIN
+    : isPencilOrPen
+      ? PENCIL_PEN_SIZE_MIN
+      : 1;
+  const thicknessMax = isHighlighter ? HIGHLIGHTER_SIZE_MAX : PENCIL_PEN_SIZE_MAX;
+  const thicknessStep = isHighlighter
+    ? HIGHLIGHTER_SIZE_STEP
+    : isPencilOrPen
+      ? PENCIL_PEN_SIZE_STEP
+      : 1;
   const thicknessValue = isHighlighter
     ? snapHighlighterSize(settings.thickness)
-    : settings.thickness;
+    : isPencilOrPen
+      ? snapPencilPenSize(settings.thickness)
+      : settings.thickness;
+  const thicknessLabel =
+    isPencilOrPen && !Number.isInteger(thicknessValue)
+      ? thicknessValue.toFixed(1)
+      : String(thicknessValue);
   const opacityValue = snapOpacity(settings.opacity);
 
   return createPortal(
@@ -194,12 +213,18 @@ export function ToolOptionsPopover({ tool, settings, onChange, anchorRef, onClos
             max={thicknessMax}
             step={thicknessStep}
             value={thicknessValue}
-            onChange={(e) => onChange({ thickness: Number(e.target.value) })}
+            onChange={(e) =>
+              onChange({
+                thickness: isPencilOrPen
+                  ? snapPencilPenSize(Number(e.target.value))
+                  : Number(e.target.value),
+              })
+            }
             className="tool-options-slider"
             aria-label={isHighlighter ? '브러시 크기' : '굵기'}
           />
         </div>
-        <span className="tool-options-value">{thicknessValue}</span>
+        <span className="tool-options-value">{thicknessLabel}</span>
       </div>
 
       <div className="tool-options-row">

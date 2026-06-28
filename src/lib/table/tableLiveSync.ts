@@ -1,6 +1,8 @@
 import type { TableObject } from '../../engine/types';
 import type { TableEditSession } from '../../components/TableEditorOverlay';
 import { applyTableDimensions, normalizeTableLayout } from './tableDimensions';
+import { normalizeAxisColors } from './tableColors';
+import { resolveSessionRowHeights } from './tableRowSizing';
 
 export function buildLiveTableFromSession(
   session: TableEditSession,
@@ -23,7 +25,19 @@ export function buildLiveTableFromSession(
     cols: session.cols,
     cells: session.cells.map((row) => [...row]),
     colWidths: normalized.colWidths,
-    rowHeights: normalized.rowHeights,
+    rowHeights: resolveSessionRowHeights(session, base.fontSize, base.cellHeight),
+    rowFillColors: session.rowFillColors.some((color) => color !== null)
+      ? [...session.rowFillColors]
+      : base.rowFillColors,
+    colFillColors: session.colFillColors.some((color) => color !== null)
+      ? [...session.colFillColors]
+      : base.colFillColors,
+    rowTextColors: session.rowTextColors.some((color) => color !== null)
+      ? [...session.rowTextColors]
+      : base.rowTextColors,
+    colTextColors: session.colTextColors.some((color) => color !== null)
+      ? [...session.colTextColors]
+      : base.colTextColors,
   };
 
   applyTableDimensions(table);
@@ -44,13 +58,20 @@ export function mergeRemoteCellsIntoSession(
     }),
   );
 
-  return { ...session, cells };
+  return {
+    ...session,
+    cells,
+    rowFillColors: normalizeAxisColors(remote.rowFillColors, session.rows),
+    colFillColors: normalizeAxisColors(remote.colFillColors, session.cols),
+    rowTextColors: normalizeAxisColors(remote.rowTextColors, session.rows),
+    colTextColors: normalizeAxisColors(remote.colTextColors, session.cols),
+  };
 }
 
 export function isTableCellInputFocused(): boolean {
   const active = document.activeElement;
   return (
-    active instanceof HTMLInputElement &&
+    (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) &&
     active.closest('.canvas-table-editor__grid') !== null
   );
 }

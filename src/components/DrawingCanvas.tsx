@@ -17,10 +17,10 @@ import type { SceneWriteEvent } from '../lib/collab/scene-events';
 import { SceneLayerMenu } from './SceneLayerMenu';
 import { RemoteCursors } from './RemoteCursors';
 import { TextOptionsPopover } from './TextOptionsPopover';
-import { TableOptionsPopover } from './TableOptionsPopover';
 import {
   createTableEditSession,
   getTableEditorTopLeft,
+  isTableSessionEmpty,
   TableEditorOverlay,
   type TableEditSession,
 } from './TableEditorOverlay';
@@ -41,6 +41,7 @@ import {
   isTableCellInputFocused,
   mergeRemoteCellsIntoSession,
 } from '../lib/table/tableLiveSync';
+import { resolveSessionRowHeights } from '../lib/table/tableRowSizing';
 
 const TABLE_CELL_LIVE_SYNC_MS = 120;
 
@@ -48,6 +49,7 @@ interface DrawingCanvasProps {
   tool: Tool;
   drawSettings: DrawToolSettings;
   eraserSettings: EraserSettings;
+  whiteboardTitle?: string;
   engineRef: React.MutableRefObject<DrawingEngine | null>;
   initialPaths?: PathObject[];
   initialImages?: ImageObject[];
@@ -56,11 +58,8 @@ interface DrawingCanvasProps {
   textSettings: TextToolSettings;
   tableSettings: TableToolSettings;
   textOptionsOpen?: boolean;
-  tableOptionsOpen?: boolean;
   onTextSettingsChange?: (patch: Partial<TextToolSettings>) => void;
-  onTableSettingsChange?: (patch: Partial<TableToolSettings>) => void;
   onTextOptionsClose?: () => void;
-  onTableOptionsClose?: () => void;
   onSelectionChange: (selectedIds: string[]) => void;
   onPathsChange?: () => void;
   onDeferredDrawChange?: () => void;
@@ -193,6 +192,7 @@ export function DrawingCanvas({
   tool,
   drawSettings,
   eraserSettings,
+  whiteboardTitle,
   engineRef,
   initialPaths = [],
   initialImages = [],
@@ -201,11 +201,8 @@ export function DrawingCanvas({
   textSettings,
   tableSettings,
   textOptionsOpen = false,
-  tableOptionsOpen = false,
   onTextSettingsChange,
-  onTableSettingsChange,
   onTextOptionsClose,
-  onTableOptionsClose,
   onSelectionChange,
   onPathsChange,
   onDeferredDrawChange,
@@ -248,6 +245,10 @@ export function DrawingCanvas({
   } | null>(null);
   const textDraftRef = useRef('');
   const textRepositioningRef = useRef(false);
+  const tableRepositioningRef = useRef(false);
+  const tableEditSessionRef = useRef<TableEditSession | null>(null);
+  const tableEditCommitLockRef = useRef(false);
+  tableEditSessionRef.current = tableEditSession;
   const [layerMenu, setLayerMenu] = useState<{ x: number; y: number } | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
   const engineInstanceRef = useRef(0);
@@ -597,19 +598,46 @@ export function DrawingCanvas({
     [scheduleTableCellLiveSync],
   );
 
+  const repositionEmptyTableSession = useCallback((worldX: number, worldY: number): boolean => {
+    const session = tableEditSessionRef.current;
+    if (!session || session.id !== null || !isTableSessionEmpty(session)) return false;
+
+    tableRepositioningRef.current = true;
+    setTableEditSession({
+      ...session,
+      topLeftX: worldX,
+      topLeftY: worldY,
+    });
+    window.setTimeout(() => {
+      tableRepositioningRef.current = false;
+    }, 0);
+    return true;
+  }, []);
+
   const commitTableEdit = useCallback(
     (session: TableEditSession) => {
+      if (tableEditCommitLockRef.current || !tableEditSessionRef.current) return;
+      tableEditCommitLockRef.current = true;
+      tableEditSessionRef.current = null;
+
       if (tableCellLiveSyncTimerRef.current !== null) {
         window.clearTimeout(tableCellLiveSyncTimerRef.current);
         tableCellLiveSyncTimerRef.current = null;
       }
 
       const engine = engineRef.current;
-      if (!engine) return;
+      if (!engine) {
+        tableEditCommitLockRef.current = false;
+        return;
+      }
 
       const trimmedCells = session.cells.map((row) => row.map((cell) => cell.trim()));
       const hasContent = trimmedCells.some((row) => row.some((cell) => cell.length > 0));
       if (!hasContent) {
+        if (tableRepositioningRef.current) {
+          tableEditCommitLockRef.current = false;
+          return;
+        }
         if (session.id) {
           const result = engine.deleteSelected();
           if (result) {
@@ -618,14 +646,25 @@ export function DrawingCanvas({
         }
         setTableEditSession(null);
         onTableEditEnd?.();
+        tableEditCommitLockRef.current = false;
         return;
       }
 
+      const layout = {
+        colWidths: session.colWidths,
+        rowHeights: resolveSessionRowHeights(
+          session,
+          tableSettings.fontSize,
+          tableSettings.cellHeight,
+        ),
+        rowFillColors: session.rowFillColors,
+        colFillColors: session.colFillColors,
+        rowTextColors: session.rowTextColors,
+        colTextColors: session.colTextColors,
+      };
+
       if (session.id) {
-        engine.updateTable(session.id, trimmedCells, tableSettings, {
-          colWidths: session.colWidths,
-          rowHeights: session.rowHeights,
-        });
+        engine.updateTable(session.id, trimmedCells, tableSettings, layout);
       } else {
         engine.addTable(
           session.topLeftX,
@@ -636,10 +675,7 @@ export function DrawingCanvas({
         );
         const created = engine.getSelectedObject();
         if (created && isTableObject(created)) {
-          const updated = engine.updateTable(created.id, trimmedCells, tableSettings, {
-            colWidths: session.colWidths,
-            rowHeights: session.rowHeights,
-          });
+          const updated = engine.updateTable(created.id, trimmedCells, tableSettings, layout);
           void updated;
         }
       }
@@ -647,6 +683,7 @@ export function DrawingCanvas({
       setTableEditSession(null);
       onTableAdded?.();
       onTableEditEnd?.();
+      tableEditCommitLockRef.current = false;
     },
     [engineRef, onTableAdded, onTableEditEnd, onObjectDeleted, tableSettings],
   );
@@ -697,6 +734,50 @@ export function DrawingCanvas({
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [textEditSession, textOptionsOpen, commitTextEdit]);
+
+  useEffect(() => {
+    if (!tableEditSession) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      const session = tableEditSessionRef.current;
+      if (!session) return;
+
+      const target = e.target as Element;
+      if (target.closest?.('.canvas-table-editor-root')) return;
+      if (target.closest?.('.table-options-popover')) return;
+      if (target.closest?.('.canvas-table-editor__menu')) return;
+      if (target.closest?.('.canvas-table-editor__menu-palette-flyout')) return;
+
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLInputElement &&
+        active.type === 'color' &&
+        active.closest('.canvas-table-editor__menu-palette-flyout')
+      ) {
+        return;
+      }
+
+      const canvas = canvasRef.current;
+      const engine = engineRef.current;
+      if (
+        session.id === null &&
+        isTableSessionEmpty(session) &&
+        canvas &&
+        engine &&
+        (target === canvas || canvas.contains(target))
+      ) {
+        const rect = canvas.getBoundingClientRect();
+        const world = engine.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+        repositionEmptyTableSession(world.x, world.y);
+        return;
+      }
+
+      commitTableEdit(session);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [tableEditSession, commitTableEdit, repositionEmptyTableSession]);
 
   const placeImagesAt = useCallback(
     async (files: File[], x: number, y: number) => {
@@ -1273,7 +1354,16 @@ export function DrawingCanvas({
   );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (tableEditSession) return;
+    if (tableEditSession) {
+      const engine = engineRef.current;
+      if (e.button === 0 && engine) {
+        const world = toWorldPoint(e, engine);
+        if (repositionEmptyTableSession(world.x, world.y)) {
+          if (e.cancelable) e.preventDefault();
+        }
+      }
+      return;
+    }
 
     if (textEditSession) {
       const draftEmpty = !textEditSession.draft.trim();
@@ -1826,20 +1916,10 @@ export function DrawingCanvas({
           session={tableEditSession}
           settings={tableSettings}
           engineRef={engineRef}
-          optionsOpen={tableOptionsOpen}
           onSessionChange={handleTableSessionChange}
           onCellInputChange={handleTableCellInputChange}
           onCommit={commitTableEdit}
           onCancel={cancelTableEdit}
-        />
-      )}
-      {tableOptionsOpen && tableEditSession && onTableSettingsChange && onTableOptionsClose && (
-        <TableOptionsPopover
-          settings={tableSettings}
-          onChange={onTableSettingsChange}
-          anchorRef={containerRef}
-          open={tableOptionsOpen}
-          onClose={onTableOptionsClose}
         />
       )}
       {tableDrag && engineRef.current && (
@@ -1886,6 +1966,7 @@ export function DrawingCanvas({
         <SceneLayerMenu
           x={layerMenu.x}
           y={layerMenu.y}
+          whiteboardTitle={whiteboardTitle}
           engineRef={engineRef}
           onClose={() => setLayerMenu(null)}
           onChange={() => onPathsChange?.()}

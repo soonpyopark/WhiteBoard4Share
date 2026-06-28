@@ -161,23 +161,6 @@ export function WhiteboardCard({
     setShareLinkDialogOpen(true);
   };
 
-  const handlePrivateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    event.stopPropagation();
-    const isPrivate = event.target.checked;
-    onUpdateShareVisibility?.(board.id, {
-      isPrivate,
-      isViewRestricted: isPrivate ? (board.isViewRestricted ?? false) : false,
-    });
-  };
-
-  const handleViewRestrictedChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    event.stopPropagation();
-    onUpdateShareVisibility?.(board.id, {
-      isPrivate: true,
-      isViewRestricted: event.target.checked,
-    });
-  };
-
   const handleDragStart = (event: DragEvent<HTMLButtonElement>) => {
     suppressClickRef.current = true;
     if (cardRef.current) {
@@ -213,25 +196,90 @@ export function WhiteboardCard({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
-        <button
-          type="button"
-          className={`card-preview-btn${canManage ? ' card-preview-btn--draggable' : ''}`}
-          draggable={canManage}
-          onClick={handlePreviewClick}
-          onDragStart={canManage ? handleDragStart : undefined}
-          onDragEnd={canManage ? handleDragEnd : undefined}
-          aria-label={
-            canManage ? `${board.title} 열기 또는 드래그하여 순서 변경` : `${board.title} 열기`
-          }
-          title={canManage ? '클릭하여 열기, 드래그하여 순서 변경' : undefined}
-        >
-          <div className="card-preview">
-            <ThumbnailPreview
-              thumbnail={board.thumbnail}
-              alt={`${board.title} 미리보기`}
-            />
-          </div>
-        </button>
+        <div className="card-preview-wrap">
+          <button
+            type="button"
+            className={`card-preview-btn${canManage ? ' card-preview-btn--draggable' : ''}`}
+            draggable={canManage}
+            onClick={handlePreviewClick}
+            onDragStart={canManage ? handleDragStart : undefined}
+            onDragEnd={canManage ? handleDragEnd : undefined}
+            aria-label={
+              canManage ? `${board.title} 열기 또는 드래그하여 순서 변경` : `${board.title} 열기`
+            }
+            title={canManage ? '클릭하여 열기, 드래그하여 순서 변경' : undefined}
+          >
+            <div className="card-preview">
+              <ThumbnailPreview
+                thumbnail={board.thumbnail}
+                cacheKey={`${board.id}-${board.updatedAt}`}
+                alt={`${board.title} 미리보기`}
+              />
+            </div>
+          </button>
+          {canManage && (
+            <div className="card-share-tags-overlay">
+              <button
+                type="button"
+                className={`card-status-tag card-status-tag--private${
+                  board.isPrivate ? ' card-status-tag--active' : ' card-status-tag--inactive'
+                }`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const isPrivate = !(board.isPrivate ?? false);
+                  onUpdateShareVisibility?.(board.id, {
+                    isPrivate,
+                    isViewRestricted: isPrivate ? (board.isViewRestricted ?? false) : false,
+                  });
+                }}
+                aria-pressed={board.isPrivate ?? false}
+              >
+                비공개
+              </button>
+              <button
+                type="button"
+                className={`card-status-tag card-status-tag--restricted${
+                  (board.isPrivate ?? false) && (board.isViewRestricted ?? false)
+                    ? ' card-status-tag--active'
+                    : ' card-status-tag--inactive'
+                }`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!(board.isPrivate ?? false)) return;
+                  onUpdateShareVisibility?.(board.id, {
+                    isPrivate: true,
+                    isViewRestricted: !(board.isViewRestricted ?? false),
+                  });
+                }}
+                disabled={!(board.isPrivate ?? false)}
+                aria-pressed={(board.isPrivate ?? false) && (board.isViewRestricted ?? false)}
+              >
+                열람제한
+              </button>
+              <button
+                type="button"
+                className={`card-status-tag card-status-tag--sharing${
+                  board.shareToken ? ' card-status-tag--active' : ' card-status-tag--inactive'
+                }`}
+                onClick={(event) => {
+                  if (!board.shareToken) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                  }
+                  void handleCopyShareLink(event);
+                }}
+                disabled={!board.shareToken}
+                title={board.shareToken ? '공유 링크 복사' : '공유 안 함'}
+                aria-pressed={!!board.shareToken}
+              >
+                공유중
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="card-meta">
           <div className="card-title-block">
@@ -244,42 +292,6 @@ export function WhiteboardCard({
               <span className="card-title">{board.title}</span>
               <span className="card-date">{formatEditedDate(board.updatedAt)}</span>
             </button>
-            {canManage && (
-              <div className="card-share-controls">
-                <div className="card-share-options">
-                  <label className="card-share-option" onClick={(event) => event.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={board.isPrivate ?? false}
-                      onChange={handlePrivateChange}
-                    />
-                    비공개
-                  </label>
-                  <label
-                    className={`card-share-option${!(board.isPrivate ?? false) ? ' card-share-option--disabled' : ''}`}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={board.isViewRestricted ?? false}
-                      disabled={!(board.isPrivate ?? false)}
-                      onChange={handleViewRestrictedChange}
-                    />
-                    열람제한
-                  </label>
-                </div>
-                {board.shareToken && (
-                  <button
-                    type="button"
-                    className="card-share-tag"
-                    onClick={(event) => void handleCopyShareLink(event)}
-                    title="공유 링크 복사"
-                  >
-                    [공유중]
-                  </button>
-                )}
-              </div>
-            )}
           </div>
 
           {canManage && (
