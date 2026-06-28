@@ -194,6 +194,7 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
   const switchDept = useCallback(
     async (dept: string) => {
       setSelectedDeptState(dept);
+      setApiByDept(dept);
 
       if (!authenticated || !isAdminRole(roleRef.current)) {
         await joinAsUser(dept, displayNameRef.current);

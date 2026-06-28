@@ -5,15 +5,22 @@ import { getTableTopLeft, TABLE_MAX_COLS, TABLE_MAX_ROWS } from '../engine/table
 import type { TableToolSettings } from '../tableToolSettings';
 import { MAIN_COLOR_PALETTE } from '../tableToolSettings';
 import {
+  applySessionAxisColor,
   axisColorsFromTable,
-  createAxisColors,
+  createEmptyAxisColorState,
   deleteColAxisColor,
+  deleteColAxisSeq,
   deleteRowAxisColor,
+  deleteRowAxisSeq,
   getCellFillColor,
   getCellTextColor,
   insertColAxisColor,
+  insertColAxisSeq,
   insertRowAxisColor,
-  type TableAxisColors,
+  insertRowAxisSeq,
+  resetSessionAxisColors,
+  type TableAxisColorPatch,
+  type TableAxisColorState,
 } from '../lib/table/tableColors';
 import { resolveSessionRowHeights, getHeaderHeightForFont } from '../lib/table/tableRowSizing';
 import {
@@ -37,7 +44,7 @@ import {
   type TableLayoutState,
 } from '../lib/table/tableStructure';
 
-export interface TableEditSession {
+export interface TableEditSession extends TableAxisColorState {
   id: string | null;
   topLeftX: number;
   topLeftY: number;
@@ -46,10 +53,6 @@ export interface TableEditSession {
   cells: string[][];
   colWidths: number[];
   rowHeights: number[];
-  rowFillColors: TableAxisColors;
-  colFillColors: TableAxisColors;
-  rowTextColors: TableAxisColors;
-  colTextColors: TableAxisColors;
   activeRow: number;
   activeCol: number;
 }
@@ -120,31 +123,23 @@ export function TableEditorOverlay({
       return;
     }
     const closeMenu = () => {
-      if (menuColorPickerOpenRef.current) return;
+      menuColorPickerOpenRef.current = false;
       setContextMenu(null);
     };
+    const isTableMenuUiTarget = (target: Element) =>
+      !!target.closest?.('.canvas-table-editor__menu') ||
+      !!target.closest?.('.canvas-table-editor__menu-palette-flyout');
+
     const closeMenuFromPointer = (event: Event) => {
-      if (menuColorPickerOpenRef.current) return;
-
       const target = event.target as Element;
-      if (target.closest?.('.canvas-table-editor__menu')) return;
-      if (target.closest?.('.canvas-table-editor__menu-palette-flyout')) return;
+      if (isTableMenuUiTarget(target)) return;
 
-      const active = document.activeElement;
-      if (
-        active instanceof HTMLInputElement &&
-        active.type === 'color' &&
-        active.closest('.canvas-table-editor__menu-palette-flyout')
-      ) {
-        return;
-      }
-
-      setContextMenu(null);
+      closeMenu();
     };
-    window.addEventListener('pointerdown', closeMenuFromPointer);
+    window.addEventListener('pointerdown', closeMenuFromPointer, true);
     window.addEventListener('scroll', closeMenu, true);
     return () => {
-      window.removeEventListener('pointerdown', closeMenuFromPointer);
+      window.removeEventListener('pointerdown', closeMenuFromPointer, true);
       window.removeEventListener('scroll', closeMenu, true);
     };
   }, [contextMenu]);
@@ -213,12 +208,7 @@ export function TableEditorOverlay({
     layout: TableLayoutState,
     activeRow = session.activeRow,
     activeCol = session.activeCol,
-    colorPatch?: Partial<
-      Pick<
-        TableEditSession,
-        'rowFillColors' | 'colFillColors' | 'rowTextColors' | 'colTextColors'
-      >
-    >,
+    colorPatch?: TableAxisColorPatch,
   ) => {
     pushSession({
       ...applyLayoutToSession(session, layout, activeRow, activeCol),
@@ -319,12 +309,7 @@ export function TableEditorOverlay({
     action: () => TableLayoutState,
     activeRow?: number,
     activeCol?: number,
-    colorPatch?: Partial<
-      Pick<
-        TableEditSession,
-        'rowFillColors' | 'colFillColors' | 'rowTextColors' | 'colTextColors'
-      >
-    >,
+    colorPatch?: TableAxisColorPatch,
   ) => {
     updateSessionLayout(action(), activeRow ?? session.activeRow, activeCol ?? session.activeCol, colorPatch);
     setContextMenu(null);
@@ -336,33 +321,11 @@ export function TableEditorOverlay({
     type: 'fill' | 'text',
     color: string | null,
   ) => {
-    if (target === 'row') {
-      const key = type === 'fill' ? 'rowFillColors' : 'rowTextColors';
-      const next = [...session[key]];
-      next[index] = color;
-      pushSession({ ...session, [key]: next });
-      return;
-    }
-    const key = type === 'fill' ? 'colFillColors' : 'colTextColors';
-    const next = [...session[key]];
-    next[index] = color;
-    pushSession({ ...session, [key]: next });
+    pushSession(applySessionAxisColor(session, target, index, type, color));
   };
 
   const resetAxisColors = (target: 'row' | 'col', index: number) => {
-    if (target === 'row') {
-      const rowFillColors = [...session.rowFillColors];
-      const rowTextColors = [...session.rowTextColors];
-      rowFillColors[index] = null;
-      rowTextColors[index] = null;
-      pushSession({ ...session, rowFillColors, rowTextColors });
-      return;
-    }
-    const colFillColors = [...session.colFillColors];
-    const colTextColors = [...session.colTextColors];
-    colFillColors[index] = null;
-    colTextColors[index] = null;
-    pushSession({ ...session, colFillColors, colTextColors });
+    pushSession(resetSessionAxisColors(session, target, index));
   };
 
   const colorSource = {
@@ -371,6 +334,10 @@ export function TableEditorOverlay({
     colFillColors: session.colFillColors,
     rowTextColors: session.rowTextColors,
     colTextColors: session.colTextColors,
+    rowFillColorSeq: session.rowFillColorSeq,
+    colFillColorSeq: session.colFillColorSeq,
+    rowTextColorSeq: session.rowTextColorSeq,
+    colTextColorSeq: session.colTextColorSeq,
   };
 
   const openColorPanel = (
@@ -457,6 +424,8 @@ export function TableEditorOverlay({
               {
                 rowFillColors: insertRowAxisColor(session.rowFillColors, rowIndex),
                 rowTextColors: insertRowAxisColor(session.rowTextColors, rowIndex),
+                rowFillColorSeq: insertRowAxisSeq(session.rowFillColorSeq, rowIndex),
+                rowTextColorSeq: insertRowAxisSeq(session.rowTextColorSeq, rowIndex),
               },
             ),
         },
@@ -471,6 +440,8 @@ export function TableEditorOverlay({
               {
                 rowFillColors: insertRowAxisColor(session.rowFillColors, rowIndex + 1),
                 rowTextColors: insertRowAxisColor(session.rowTextColors, rowIndex + 1),
+                rowFillColorSeq: insertRowAxisSeq(session.rowFillColorSeq, rowIndex + 1),
+                rowTextColorSeq: insertRowAxisSeq(session.rowTextColorSeq, rowIndex + 1),
               },
             ),
         },
@@ -482,6 +453,8 @@ export function TableEditorOverlay({
             runStructureAction(() => deleteRowAt(layoutFromSession(session), rowIndex), undefined, undefined, {
               rowFillColors: deleteRowAxisColor(session.rowFillColors, rowIndex),
               rowTextColors: deleteRowAxisColor(session.rowTextColors, rowIndex),
+              rowFillColorSeq: deleteRowAxisSeq(session.rowFillColorSeq, rowIndex),
+              rowTextColorSeq: deleteRowAxisSeq(session.rowTextColorSeq, rowIndex),
             });
           },
         },
@@ -502,6 +475,8 @@ export function TableEditorOverlay({
               {
                 colFillColors: insertColAxisColor(session.colFillColors, colIndex),
                 colTextColors: insertColAxisColor(session.colTextColors, colIndex),
+                colFillColorSeq: insertColAxisSeq(session.colFillColorSeq, colIndex),
+                colTextColorSeq: insertColAxisSeq(session.colTextColorSeq, colIndex),
               },
             ),
         },
@@ -516,6 +491,8 @@ export function TableEditorOverlay({
               {
                 colFillColors: insertColAxisColor(session.colFillColors, colIndex + 1),
                 colTextColors: insertColAxisColor(session.colTextColors, colIndex + 1),
+                colFillColorSeq: insertColAxisSeq(session.colFillColorSeq, colIndex + 1),
+                colTextColorSeq: insertColAxisSeq(session.colTextColorSeq, colIndex + 1),
               },
             ),
         },
@@ -527,6 +504,8 @@ export function TableEditorOverlay({
             runStructureAction(() => deleteColAt(layoutFromSession(session), colIndex), undefined, undefined, {
               colFillColors: deleteColAxisColor(session.colFillColors, colIndex),
               colTextColors: deleteColAxisColor(session.colTextColors, colIndex),
+              colFillColorSeq: deleteColAxisSeq(session.colFillColorSeq, colIndex),
+              colTextColorSeq: deleteColAxisSeq(session.colTextColorSeq, colIndex),
             });
           },
         },
@@ -719,6 +698,8 @@ export function TableEditorOverlay({
                 updateSessionLayout(appendRow(layoutFromSession(session), defaultRowHeight), session.activeRow, session.activeCol, {
                   rowFillColors: insertRowAxisColor(session.rowFillColors, session.rows),
                   rowTextColors: insertRowAxisColor(session.rowTextColors, session.rows),
+                  rowFillColorSeq: insertRowAxisSeq(session.rowFillColorSeq, session.rows),
+                  rowTextColorSeq: insertRowAxisSeq(session.rowTextColorSeq, session.rows),
                 }),
               )
             }
@@ -733,6 +714,8 @@ export function TableEditorOverlay({
                 updateSessionLayout(removeLastRow(layoutFromSession(session)), session.activeRow, session.activeCol, {
                   rowFillColors: deleteRowAxisColor(session.rowFillColors, session.rows - 1),
                   rowTextColors: deleteRowAxisColor(session.rowTextColors, session.rows - 1),
+                  rowFillColorSeq: deleteRowAxisSeq(session.rowFillColorSeq, session.rows - 1),
+                  rowTextColorSeq: deleteRowAxisSeq(session.rowTextColorSeq, session.rows - 1),
                 }),
               )
             }
@@ -747,6 +730,8 @@ export function TableEditorOverlay({
                 updateSessionLayout(appendCol(layoutFromSession(session), defaultColWidth), session.activeRow, session.activeCol, {
                   colFillColors: insertColAxisColor(session.colFillColors, session.cols),
                   colTextColors: insertColAxisColor(session.colTextColors, session.cols),
+                  colFillColorSeq: insertColAxisSeq(session.colFillColorSeq, session.cols),
+                  colTextColorSeq: insertColAxisSeq(session.colTextColorSeq, session.cols),
                 }),
               )
             }
@@ -761,6 +746,8 @@ export function TableEditorOverlay({
                 updateSessionLayout(removeLastCol(layoutFromSession(session)), session.activeRow, session.activeCol, {
                   colFillColors: deleteColAxisColor(session.colFillColors, session.cols - 1),
                   colTextColors: deleteColAxisColor(session.colTextColors, session.cols - 1),
+                  colFillColorSeq: deleteColAxisSeq(session.colFillColorSeq, session.cols - 1),
+                  colTextColorSeq: deleteColAxisSeq(session.colTextColorSeq, session.cols - 1),
                 }),
               )
             }
@@ -930,6 +917,7 @@ export function createTableEditSession(
   const cellWidth = settings?.cellWidth ?? 80;
   const cellHeight = settings?.cellHeight ?? 32;
   const layout = createTableLayoutState(rows, cols, cellWidth, cellHeight);
+  const colors = createEmptyAxisColorState(layout.rows, layout.cols);
 
   return {
     id: null,
@@ -940,10 +928,7 @@ export function createTableEditSession(
     cells: layout.cells,
     colWidths: layout.colWidths,
     rowHeights: layout.rowHeights,
-    rowFillColors: createAxisColors(layout.rows),
-    colFillColors: createAxisColors(layout.cols),
-    rowTextColors: createAxisColors(layout.rows),
-    colTextColors: createAxisColors(layout.cols),
+    ...colors,
     activeRow: 0,
     activeCol: 0,
   };

@@ -100,7 +100,6 @@
 
 .gallery-auth-user {
   font-size: 0.8125rem;
-  font-weight: 600;
   color: #323130;
   white-space: nowrap;
 }
@@ -167,7 +166,16 @@
 }
 
 .gallery-auth-display-name {
-  width: 132px;
+  width: auto;
+  field-sizing: content;
+  min-width: 5.5ch;
+  max-width: 18ch;
+}
+
+@supports not (field-sizing: content) {
+  .gallery-auth-display-name {
+    width: 7.5em;
+  }
 }
 
 .gallery-auth-input:focus,

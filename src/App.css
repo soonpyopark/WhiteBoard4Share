@@ -1544,6 +1544,7 @@
   flex-shrink: 0;
   object-fit: contain;
   border-radius: 14px;
+  background: #ffffff;
   pointer-events: none;
 }
 

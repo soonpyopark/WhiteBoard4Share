@@ -81,7 +81,7 @@ function createSplashWindow(): void {
 
   splashWindow = new BrowserWindow({
     width: 400,
-    height: 129,
+    height: 110,
     frame: false,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -101,7 +101,6 @@ function createSplashWindow(): void {
     query: {
       mode: 'loading',
       title: APP_CONFIG.title,
-      author: APP_CONFIG.authorName,
       blog: APP_CONFIG.blogUrl,
     },
   });

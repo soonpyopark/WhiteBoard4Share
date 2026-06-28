@@ -72,6 +72,11 @@ export interface TableObject {
   colFillColors?: (string | null)[];
   rowTextColors?: (string | null)[];
   colTextColors?: (string | null)[];
+  axisColorSeq?: number;
+  rowFillColorSeq?: (number | null)[];
+  colFillColorSeq?: (number | null)[];
+  rowTextColorSeq?: (number | null)[];
+  colTextColorSeq?: (number | null)[];
   width: number;
   height: number;
   transform: PathTransform;

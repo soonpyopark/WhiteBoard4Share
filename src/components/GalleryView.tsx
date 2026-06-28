@@ -83,6 +83,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
 
   useEffect(() => {
     if (sessionLoading) return;
+    setBoards([]);
     void load();
   }, [load, sessionLoading]);
 
@@ -349,7 +350,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
 
             {boards.map((board) => (
               <WhiteboardCard
-                key={board.id}
+                key={`${selectedDept}-${board.id}`}
                 board={board}
                 onOpen={onOpen}
                 onDelete={canCreateWhiteboard ? handleDelete : undefined}

@@ -1,7 +1,7 @@
 import type { TableObject } from '../../engine/types';
 import type { TableEditSession } from '../../components/TableEditorOverlay';
 import { applyTableDimensions, normalizeTableLayout } from './tableDimensions';
-import { normalizeAxisColors } from './tableColors';
+import { normalizeAxisColors, normalizeAxisSeqs } from './tableColors';
 import { resolveSessionRowHeights } from './tableRowSizing';
 
 export function buildLiveTableFromSession(
@@ -38,6 +38,19 @@ export function buildLiveTableFromSession(
     colTextColors: session.colTextColors.some((color) => color !== null)
       ? [...session.colTextColors]
       : base.colTextColors,
+    axisColorSeq: session.axisColorSeq > 0 ? session.axisColorSeq : base.axisColorSeq,
+    rowFillColorSeq: session.rowFillColorSeq.some((seq) => seq !== null)
+      ? [...session.rowFillColorSeq]
+      : base.rowFillColorSeq,
+    colFillColorSeq: session.colFillColorSeq.some((seq) => seq !== null)
+      ? [...session.colFillColorSeq]
+      : base.colFillColorSeq,
+    rowTextColorSeq: session.rowTextColorSeq.some((seq) => seq !== null)
+      ? [...session.rowTextColorSeq]
+      : base.rowTextColorSeq,
+    colTextColorSeq: session.colTextColorSeq.some((seq) => seq !== null)
+      ? [...session.colTextColorSeq]
+      : base.colTextColorSeq,
   };
 
   applyTableDimensions(table);
@@ -61,10 +74,15 @@ export function mergeRemoteCellsIntoSession(
   return {
     ...session,
     cells,
+    axisColorSeq: remote.axisColorSeq ?? session.axisColorSeq,
     rowFillColors: normalizeAxisColors(remote.rowFillColors, session.rows),
     colFillColors: normalizeAxisColors(remote.colFillColors, session.cols),
     rowTextColors: normalizeAxisColors(remote.rowTextColors, session.rows),
     colTextColors: normalizeAxisColors(remote.colTextColors, session.cols),
+    rowFillColorSeq: normalizeAxisSeqs(remote.rowFillColorSeq, session.rows),
+    colFillColorSeq: normalizeAxisSeqs(remote.colFillColorSeq, session.cols),
+    rowTextColorSeq: normalizeAxisSeqs(remote.rowTextColorSeq, session.rows),
+    colTextColorSeq: normalizeAxisSeqs(remote.colTextColorSeq, session.cols),
   };
 }
 

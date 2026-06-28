@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useDeptSession } from '../context/DeptSessionContext.tsx';
 import type { UserRole } from '../../shared/auth.ts';
+import { AlertDialog } from './AlertDialog';
 
 function adminRoleLabel(role: UserRole | null): string | null {
   if (role === 'super') return '총괄관리자';
@@ -29,6 +30,7 @@ export function GalleryAuthBar() {
   const [submitting, setSubmitting] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginErrorMessage, setLoginErrorMessage] = useState<string | null>(null);
 
   const isAdmin = authenticated && (role === 'super' || role === 'dept');
   const adminLabel = adminRoleLabel(role);
@@ -49,11 +51,12 @@ export function GalleryAuthBar() {
 
     setSubmitting(true);
     setError(null);
+    setLoginErrorMessage(null);
     try {
       await login(loginUsername, password);
       setPassword('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '로그인에 실패했습니다');
+      setLoginErrorMessage(err instanceof Error ? err.message : '로그인에 실패했습니다');
     } finally {
       setSubmitting(false);
     }
@@ -126,7 +129,6 @@ export function GalleryAuthBar() {
         </div>
       ) : showAdminLogin ? (
         <form className="gallery-auth-form" onSubmit={(event) => void handleLogin(event)}>
-          <span className="gallery-auth-label gallery-auth-label--inline">관리자</span>
           <input
             type="text"
             className="gallery-auth-input"
@@ -179,6 +181,13 @@ export function GalleryAuthBar() {
           {error}
         </span>
       )}
+
+      <AlertDialog
+        open={loginErrorMessage !== null}
+        title="로그인 실패"
+        body={loginErrorMessage ?? ''}
+        onClose={() => setLoginErrorMessage(null)}
+      />
     </div>
   );
 }

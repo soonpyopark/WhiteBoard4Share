@@ -661,6 +661,11 @@ export function DrawingCanvas({
         colFillColors: session.colFillColors,
         rowTextColors: session.rowTextColors,
         colTextColors: session.colTextColors,
+        axisColorSeq: session.axisColorSeq,
+        rowFillColorSeq: session.rowFillColorSeq,
+        colFillColorSeq: session.colFillColorSeq,
+        rowTextColorSeq: session.rowTextColorSeq,
+        colTextColorSeq: session.colTextColorSeq,
       };
 
       if (session.id) {

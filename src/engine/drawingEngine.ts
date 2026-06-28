@@ -1130,6 +1130,11 @@ export class DrawingEngine {
       colFillColors?: (string | null)[];
       rowTextColors?: (string | null)[];
       colTextColors?: (string | null)[];
+      axisColorSeq?: number;
+      rowFillColorSeq?: (number | null)[];
+      colFillColorSeq?: (number | null)[];
+      rowTextColorSeq?: (number | null)[];
+      colTextColorSeq?: (number | null)[];
     },
   ): TableObject | null {
     const table = this.tables.find((item) => item.id === id);
@@ -1178,6 +1183,11 @@ export class DrawingEngine {
         colFillColors: layout.colFillColors,
         rowTextColors: layout.rowTextColors,
         colTextColors: layout.colTextColors,
+        axisColorSeq: layout.axisColorSeq,
+        rowFillColorSeq: layout.rowFillColorSeq,
+        colFillColorSeq: layout.colFillColorSeq,
+        rowTextColorSeq: layout.rowTextColorSeq,
+        colTextColorSeq: layout.colTextColorSeq,
       });
     }
     applyTableDimensions(table);
