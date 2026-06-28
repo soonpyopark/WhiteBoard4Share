@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Tool } from '../engine/types';
 import { EraserOptionsPopover } from './EraserOptionsPopover';
 import { TextOptionsPopover, type TextOptionsPopoverPlacement } from './TextOptionsPopover';
@@ -153,6 +153,110 @@ function TableToolIcon() {
   );
 }
 
+const TOOLS_BAR_POSITION_KEY = 'whiteboard4share-tools-bar-position';
+
+type ToolsBarDockSide = 'left' | 'right' | 'bottom' | null;
+
+type ToolsBarPosition = {
+  left: number;
+  top: number;
+  dock: ToolsBarDockSide;
+};
+
+function readStoredToolsBarPosition(): ToolsBarPosition | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = localStorage.getItem(TOOLS_BAR_POSITION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ToolsBarPosition>;
+    if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+      const dock =
+        parsed.dock === 'left' || parsed.dock === 'right' || parsed.dock === 'bottom'
+          ? parsed.dock
+          : null;
+      return {
+        left: dock === 'right' ? 0 : parsed.left,
+        top: dock === 'bottom' ? 0 : parsed.top,
+        dock,
+      };
+    }
+  } catch {
+    /* ignore invalid stored value */
+  }
+
+  return null;
+}
+
+const TOOLS_BAR_EDGE_THRESHOLD = 4;
+
+function readDockSideFromGeometry(
+  bar: HTMLElement,
+  parent: HTMLElement,
+  positionLeft: number,
+  positionTop: number,
+): ToolsBarDockSide {
+  const maxTop = Math.max(0, parent.clientHeight - bar.offsetHeight);
+  if (positionTop >= maxTop - TOOLS_BAR_EDGE_THRESHOLD) return 'bottom';
+
+  const barRect = bar.getBoundingClientRect();
+  const parentRect = parent.getBoundingClientRect();
+  const bottomGap = parentRect.height - (barRect.bottom - parentRect.top);
+  if (bottomGap <= TOOLS_BAR_EDGE_THRESHOLD) return 'bottom';
+
+  const maxLeft = Math.max(0, parent.clientWidth - bar.offsetWidth);
+  if (positionLeft <= TOOLS_BAR_EDGE_THRESHOLD) return 'left';
+  if (positionLeft >= maxLeft - TOOLS_BAR_EDGE_THRESHOLD) return 'right';
+
+  const rightGap = parentRect.width - (barRect.right - parentRect.left);
+  if (rightGap <= TOOLS_BAR_EDGE_THRESHOLD) return 'right';
+
+  return null;
+}
+
+function clampToolsBarPosition(
+  left: number,
+  top: number,
+  dock: ToolsBarDockSide,
+  bar: HTMLElement,
+  parent: HTMLElement,
+): ToolsBarPosition {
+  const maxTop = Math.max(0, parent.clientHeight - bar.offsetHeight);
+  const maxLeft = Math.max(0, parent.clientWidth - bar.offsetWidth);
+
+  if (dock === 'bottom') {
+    return {
+      left: Math.min(Math.max(0, left), maxLeft),
+      top: 0,
+      dock: 'bottom',
+    };
+  }
+  if (dock === 'left') {
+    return { left: 0, top: Math.min(Math.max(0, top), maxTop), dock: 'left' };
+  }
+  if (dock === 'right') {
+    return { left: 0, top: Math.min(Math.max(0, top), maxTop), dock: 'right' };
+  }
+
+  return {
+    left: Math.min(Math.max(0, left), maxLeft),
+    top: Math.min(Math.max(0, top), maxTop),
+    dock: null,
+  };
+}
+
+function DragHandleIcon() {
+  return (
+    <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true">
+      {[0, 6, 12].map((cy) =>
+        [2, 8].map((cx) => (
+          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.35" fill="currentColor" />
+        )),
+      )}
+    </svg>
+  );
+}
+
 const TOOLS: { id: Tool; label: string; icon: ReactNode }[] = [
   { id: 'text', label: '텍스트', icon: <TextToolIcon /> },
   { id: 'hand', label: '손 — 화면 이동', icon: '✋' },
@@ -187,6 +291,16 @@ export function DrawingToolsBar({
   onUndo,
   onRedo,
 }: DrawingToolsBarProps) {
+  const barRef = useRef<HTMLDivElement>(null);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originLeft: number;
+    originTop: number;
+  } | null>(null);
+  const [position, setPosition] = useState<ToolsBarPosition | null>(() => readStoredToolsBarPosition());
+  const isDraggingRef = useRef(false);
   const toolButtonRefs = useRef<Partial<Record<DrawSettingsTool, HTMLButtonElement | null>>>({});
   const drawAnchorRef = useRef<HTMLButtonElement | null>(null);
   const eraserAnchorRef = useRef<HTMLButtonElement | null>(null);
@@ -197,9 +311,197 @@ export function DrawingToolsBar({
   const showTableOptions =
     tool === 'table' && drawOptionsOpen && tableOptionsPlacement === 'toolbar';
 
+  const persistPosition = useCallback((next: ToolsBarPosition) => {
+    setPosition(next);
+    try {
+      localStorage.setItem(TOOLS_BAR_POSITION_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore quota errors */
+    }
+  }, []);
+
+  const updatePosition = useCallback((next: ToolsBarPosition) => {
+    setPosition(next);
+  }, []);
+
+  const syncBarLayout = useCallback(
+    (next: ToolsBarPosition, persist = false) => {
+      if (persist) {
+        persistPosition(next);
+      } else {
+        setPosition(next);
+      }
+    },
+    [persistPosition],
+  );
+
+  const resolveBarLayout = useCallback(
+    (left: number, top: number, dock: ToolsBarDockSide, persist = false) => {
+      const bar = barRef.current;
+      const parent = bar?.offsetParent as HTMLElement | null;
+      if (!bar || !parent) return;
+
+      const resolvedDock = dock ?? readDockSideFromGeometry(bar, parent, left, top);
+      const next = clampToolsBarPosition(left, top, resolvedDock, bar, parent);
+
+      if (
+        position &&
+        position.left === next.left &&
+        position.top === next.top &&
+        position.dock === next.dock
+      ) {
+        if (persist) {
+          try {
+            localStorage.setItem(TOOLS_BAR_POSITION_KEY, JSON.stringify(next));
+          } catch {
+            /* ignore quota errors */
+          }
+        }
+        return;
+      }
+
+      syncBarLayout(next, persist);
+    },
+    [position, syncBarLayout],
+  );
+
+  const getBarPosition = useCallback((): ToolsBarPosition | null => {
+    const bar = barRef.current;
+    const parent = bar?.offsetParent as HTMLElement | null;
+    if (!bar || !parent) return null;
+
+    const barRect = bar.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    return clampToolsBarPosition(
+      barRect.left - parentRect.left,
+      barRect.top - parentRect.top,
+      null,
+      bar,
+      parent,
+    );
+  }, []);
+
+  const handleDragPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const visual = getBarPosition();
+    if (!visual) return;
+
+    isDraggingRef.current = true;
+    if (!position) {
+      updatePosition(visual);
+    } else if (position.dock) {
+      updatePosition({ ...visual, dock: null });
+    }
+
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originLeft: visual.left,
+      originTop: visual.top,
+    };
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleDragPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragStateRef.current;
+    const bar = barRef.current;
+    const parent = bar?.offsetParent as HTMLElement | null;
+    if (!drag || drag.pointerId !== event.pointerId || !bar || !parent) return;
+
+    const next = clampToolsBarPosition(
+      drag.originLeft + (event.clientX - drag.startX),
+      drag.originTop + (event.clientY - drag.startY),
+      null,
+      bar,
+      parent,
+    );
+    updatePosition(next);
+  };
+
+  const handleDragPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    dragStateRef.current = null;
+    isDraggingRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    resolveBarLayout(
+      drag.originLeft + (event.clientX - drag.startX),
+      drag.originTop + (event.clientY - drag.startY),
+      null,
+      true,
+    );
+  };
+
+  useLayoutEffect(() => {
+    if (!position || isDraggingRef.current) return;
+    resolveBarLayout(position.left, position.top, position.dock, true);
+    // Mount-only correction for saved/clamped toolbar placement.
+  }, []);
+
+  useEffect(() => {
+    if (!position) return;
+
+    const handleResize = () => {
+      if (isDraggingRef.current) return;
+      resolveBarLayout(position.left, position.top, position.dock, false);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [position, resolveBarLayout]);
+
+  const dockSide = position?.dock ?? null;
+  const useColumnLayout = dockSide === 'left' || dockSide === 'right';
+  const barStyle = position
+    ? dockSide === 'bottom'
+      ? {
+          bottom: 0,
+          top: 'auto' as const,
+          left: `${position.left}px`,
+        }
+      : {
+          top: `${position.top}px`,
+          ...(dockSide === null ? { left: `${position.left}px` } : {}),
+        }
+    : undefined;
+
+  const positionClass =
+    dockSide === 'left'
+      ? ' canvas-tools-bar--dock-left'
+      : dockSide === 'right'
+        ? ' canvas-tools-bar--dock-right'
+        : dockSide === 'bottom'
+          ? ' canvas-tools-bar--dock-bottom'
+          : ' canvas-tools-bar--floating';
+
   return (
-    <div className="canvas-tools-bar" aria-label="도구">
+    <div
+      ref={barRef}
+      className={`canvas-tools-bar${position ? positionClass : ''}${useColumnLayout ? ' canvas-tools-bar--column' : ''}`}
+      style={barStyle}
+      aria-label="도구"
+    >
       <div className="canvas-tools-bar__inner">
+        <button
+          type="button"
+          className="canvas-tools-bar__drag-handle"
+          onPointerDown={handleDragPointerDown}
+          onPointerMove={handleDragPointerMove}
+          onPointerUp={handleDragPointerUp}
+          onPointerCancel={handleDragPointerUp}
+          title="도구 모음 이동"
+          aria-label="도구 모음 이동"
+        >
+          <DragHandleIcon />
+        </button>
         <div className="history-group" role="group" aria-label="실행 취소">
           <button
             type="button"
