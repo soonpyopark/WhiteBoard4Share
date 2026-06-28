@@ -54,7 +54,7 @@ export async function syncEngineFromYdoc(
   ydoc: CollabSession['ydoc'],
 ): Promise<void> {
   const scene = readSceneFromDoc(ydoc);
-  await engine.applyRemoteScene(scene.paths, scene.images, scene.texts);
+  await engine.applyRemoteScene(scene.paths, scene.images, scene.texts, scene.tables);
 }
 
 function cloneSceneSnapshot(scene: SceneSnapshot): SceneSnapshot {
@@ -62,6 +62,7 @@ function cloneSceneSnapshot(scene: SceneSnapshot): SceneSnapshot {
     paths: structuredClone(scene.paths),
     images: structuredClone(scene.images),
     texts: structuredClone(scene.texts),
+    tables: structuredClone(scene.tables),
   };
 }
 
@@ -78,10 +79,12 @@ export async function applySceneDeltaToEngine(
     for (const id of deletes.paths) engine.removeRemotePath(id);
     for (const id of deletes.images) engine.removeRemoteImage(id);
     for (const id of deletes.texts) engine.removeRemoteText(id);
+    for (const id of deletes.tables) engine.removeRemoteTable(id);
 
     for (const path of upserts.paths) engine.upsertRemotePath(path);
     for (const image of upserts.images) await engine.upsertRemoteImage(image);
     for (const text of upserts.texts) engine.upsertRemoteText(text);
+    for (const table of upserts.tables) engine.upsertRemoteTable(table);
   } finally {
     await engine.endRemoteUpdateBatch();
   }
@@ -95,9 +98,11 @@ function countSceneChanges(
     upserts.paths.length +
     upserts.images.length +
     upserts.texts.length +
+    upserts.tables.length +
     deletes.paths.length +
     deletes.images.length +
-    deletes.texts.length
+    deletes.texts.length +
+    deletes.tables.length
   );
 }
 
@@ -108,18 +113,18 @@ export async function syncEngineFromYdocDelta(
 ): Promise<SceneSnapshot> {
   const next = readSceneFromDoc(ydoc);
   if (!previous) {
-    await engine.applyRemoteScene(next.paths, next.images, next.texts);
+    await engine.applyRemoteScene(next.paths, next.images, next.texts, next.tables);
     return cloneSceneSnapshot(next);
   }
 
   if (isSnapshotEmpty(next) && !isSnapshotEmpty(previous)) {
-    await engine.applyRemoteScene([], [], []);
-    return { paths: [], images: [], texts: [] };
+    await engine.applyRemoteScene([], [], [], []);
+    return { paths: [], images: [], texts: [], tables: [] };
   }
 
   const { upserts, deletes } = diffSceneSnapshots(previous, next);
   if (countSceneChanges(upserts, deletes) >= BULK_SYNC_THRESHOLD) {
-    await engine.applyRemoteScene(next.paths, next.images, next.texts);
+    await engine.applyRemoteScene(next.paths, next.images, next.texts, next.tables);
   } else {
     await applySceneDeltaToEngine(engine, previous, next);
   }
@@ -130,11 +135,13 @@ function diffPendingLocalScene(ydocScene: SceneSnapshot, localScene: SceneSnapsh
   const ydocPathIds = new Set(ydocScene.paths.map((item) => item.id));
   const ydocImageIds = new Set(ydocScene.images.map((item) => item.id));
   const ydocTextIds = new Set(ydocScene.texts.map((item) => item.id));
+  const ydocTableIds = new Set(ydocScene.tables.map((item) => item.id));
 
   return {
     paths: localScene.paths.filter((item) => !ydocPathIds.has(item.id)),
     images: localScene.images.filter((item) => !ydocImageIds.has(item.id)),
     texts: localScene.texts.filter((item) => !ydocTextIds.has(item.id)),
+    tables: localScene.tables.filter((item) => !ydocTableIds.has(item.id)),
   };
 }
 
@@ -146,7 +153,8 @@ export function mergePendingLocalSceneToDoc(
   if (
     pending.paths.length > 0 ||
     pending.images.length > 0 ||
-    pending.texts.length > 0
+    pending.texts.length > 0 ||
+    pending.tables.length > 0
   ) {
     mergeSceneToDoc(ydoc, pending);
   }
@@ -157,5 +165,6 @@ export function captureEngineScene(engine: DrawingEngine): SceneSnapshot {
     paths: engine.getPathsSnapshot(),
     images: engine.getImagesSnapshot(),
     texts: engine.getTextsSnapshot(),
+    tables: engine.getTablesSnapshot(),
   };
 }

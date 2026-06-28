@@ -170,6 +170,7 @@ export async function saveWhiteboard(
     paths: payload.paths,
     images: payload.images ?? existing.images ?? [],
     texts: payload.texts ?? existing.texts ?? [],
+    tables: payload.tables ?? existing.tables ?? [],
     thumbnail: payload.thumbnail ?? existing.thumbnail,
     updatedAt: new Date().toISOString(),
   };
@@ -303,6 +304,7 @@ export async function copyWhiteboard(
     paths: cloneWithNewIds(existing.paths),
     images: cloneWithNewIds(existing.images),
     texts: cloneWithNewIds(existing.texts),
+    tables: cloneWithNewIds(existing.tables),
     thumbnail: existing.thumbnail,
   };
 

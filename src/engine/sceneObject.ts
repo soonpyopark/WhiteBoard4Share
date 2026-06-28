@@ -5,8 +5,16 @@ import {
   pathIntersectsLasso,
   pointInPolygon,
 } from './hitTest';
-import type { ImageObject, LassoPoint, PathObject, Rect, SceneObject, TextObject } from './types';
-import { isTextObject } from './types';
+import type {
+  ImageObject,
+  LassoPoint,
+  PathObject,
+  Rect,
+  SceneObject,
+  TableObject,
+  TextObject,
+} from './types';
+import { isTableObject, isTextObject } from './types';
 
 function objectZIndex(obj: SceneObject): number {
   return obj.zIndex ?? 0;
@@ -16,11 +24,13 @@ export function getNextZIndex(
   paths: PathObject[],
   images: ImageObject[],
   texts: TextObject[] = [],
+  tables: TableObject[] = [],
 ): number {
   let max = -1;
   for (const path of paths) max = Math.max(max, objectZIndex(path));
   for (const image of images) max = Math.max(max, objectZIndex(image));
   for (const text of texts) max = Math.max(max, objectZIndex(text));
+  for (const table of tables) max = Math.max(max, objectZIndex(table));
   return max + 1;
 }
 
@@ -29,14 +39,16 @@ export function normalizeSceneZIndices(
   paths: PathObject[],
   images: ImageObject[],
   texts: TextObject[] = [],
+  tables: TableObject[] = [],
 ): void {
   const hasZIndex =
     paths.some((p) => p.zIndex != null) ||
     images.some((i) => i.zIndex != null) ||
-    texts.some((t) => t.zIndex != null);
+    texts.some((t) => t.zIndex != null) ||
+    tables.some((t) => t.zIndex != null);
 
   if (hasZIndex) {
-    let next = getNextZIndex(paths, images, texts);
+    let next = getNextZIndex(paths, images, texts, tables);
     for (const path of paths) {
       if (path.zIndex == null) {
         path.zIndex = next;
@@ -55,6 +67,12 @@ export function normalizeSceneZIndices(
         next += 1;
       }
     }
+    for (const table of tables) {
+      if (table.zIndex == null) {
+        table.zIndex = next;
+        next += 1;
+      }
+    }
     return;
   }
 
@@ -67,6 +85,10 @@ export function normalizeSceneZIndices(
     text.zIndex = index;
     index += 1;
   });
+  tables.forEach((table) => {
+    table.zIndex = index;
+    index += 1;
+  });
   paths.forEach((path) => {
     path.zIndex = index;
     index += 1;
@@ -77,8 +99,11 @@ export function getSceneObjectsSorted(
   paths: PathObject[],
   images: ImageObject[],
   texts: TextObject[] = [],
+  tables: TableObject[] = [],
 ): SceneObject[] {
-  return [...paths, ...images, ...texts].sort((a, b) => objectZIndex(a) - objectZIndex(b));
+  return [...paths, ...images, ...texts, ...tables].sort(
+    (a, b) => objectZIndex(a) - objectZIndex(b),
+  );
 }
 
 export function getImageLocalBounds(image: ImageObject): Rect {
@@ -99,9 +124,19 @@ export function getTextLocalBounds(text: TextObject): Rect {
   };
 }
 
+export function getTableLocalBounds(table: TableObject): Rect {
+  return {
+    x: -table.width / 2,
+    y: -table.height / 2,
+    w: table.width,
+    h: table.height,
+  };
+}
+
 export function getObjectLocalBounds(obj: SceneObject): Rect {
   if ('points' in obj) return getLocalBounds(obj);
   if (isTextObject(obj)) return getTextLocalBounds(obj);
+  if (isTableObject(obj)) return getTableLocalBounds(obj);
   return getImageLocalBounds(obj);
 }
 
@@ -154,20 +189,36 @@ export function hitTestText(text: TextObject, wx: number, wy: number): boolean {
   );
 }
 
+export function hitTestTable(table: TableObject, wx: number, wy: number): boolean {
+  const local = worldToLocal(wx, wy, table.transform);
+  const pad = 4 / table.transform.scale;
+  const halfW = table.width / 2 + pad;
+  const halfH = table.height / 2 + pad;
+  return (
+    local.x >= -halfW &&
+    local.x <= halfW &&
+    local.y >= -halfH &&
+    local.y <= halfH
+  );
+}
+
 export function hitTestSceneAt(
   paths: PathObject[],
   images: ImageObject[],
   wx: number,
   wy: number,
   texts: TextObject[] = [],
+  tables: TableObject[] = [],
 ): SceneObject | null {
-  const sorted = getSceneObjectsSorted(paths, images, texts);
+  const sorted = getSceneObjectsSorted(paths, images, texts, tables);
   for (let i = sorted.length - 1; i >= 0; i--) {
     const obj = sorted[i];
     if ('points' in obj) {
       if (hitTestPath(obj, wx, wy)) return obj;
     } else if (isTextObject(obj)) {
       if (hitTestText(obj, wx, wy)) return obj;
+    } else if (isTableObject(obj)) {
+      if (hitTestTable(obj, wx, wy)) return obj;
     } else if (hitTestImage(obj, wx, wy)) {
       return obj;
     }
@@ -180,8 +231,9 @@ export function hitTestSceneInLasso(
   images: ImageObject[],
   lasso: LassoPoint[],
   texts: TextObject[] = [],
+  tables: TableObject[] = [],
 ): SceneObject | null {
-  const hits = hitAllSceneInLasso(paths, images, lasso, texts);
+  const hits = hitAllSceneInLasso(paths, images, lasso, texts, tables);
   return hits.length > 0 ? hits[hits.length - 1] : null;
 }
 
@@ -190,10 +242,11 @@ export function hitAllSceneInLasso(
   images: ImageObject[],
   lasso: LassoPoint[],
   texts: TextObject[] = [],
+  tables: TableObject[] = [],
 ): SceneObject[] {
   if (lasso.length < 3) return [];
 
-  const sorted = getSceneObjectsSorted(paths, images, texts);
+  const sorted = getSceneObjectsSorted(paths, images, texts, tables);
   const hit: SceneObject[] = [];
 
   for (const obj of sorted) {
@@ -210,6 +263,7 @@ export function getObjectsByIds(
   images: ImageObject[],
   ids: readonly string[],
   texts: TextObject[] = [],
+  tables: TableObject[] = [],
 ): SceneObject[] {
   if (ids.length === 0) return [];
 
@@ -224,6 +278,9 @@ export function getObjectsByIds(
   }
   for (const text of texts) {
     if (idSet.has(text.id)) result.push(text);
+  }
+  for (const table of tables) {
+    if (idSet.has(table.id)) result.push(table);
   }
 
   return result;
@@ -259,12 +316,14 @@ export function getSelectedObject(
   images: ImageObject[],
   selectedId: string | null,
   texts: TextObject[] = [],
+  tables: TableObject[] = [],
 ): SceneObject | null {
   if (!selectedId) return null;
   return (
     paths.find((p) => p.id === selectedId) ??
     images.find((i) => i.id === selectedId) ??
     texts.find((t) => t.id === selectedId) ??
+    tables.find((t) => t.id === selectedId) ??
     null
   );
 }
@@ -286,10 +345,11 @@ export function canApplyLayerMove(
   texts: TextObject[],
   selectedIds: readonly string[],
   move: LayerMove,
+  tables: TableObject[] = [],
 ): boolean {
   if (selectedIds.length === 0) return false;
 
-  const sorted = getSceneObjectsSorted(paths, images, texts);
+  const sorted = getSceneObjectsSorted(paths, images, texts, tables);
   const indices = selectedIndices(sorted, selectedIds);
   if (indices.length === 0) return false;
 
@@ -312,10 +372,11 @@ export function applyLayerMove(
   texts: TextObject[],
   selectedIds: readonly string[],
   move: LayerMove,
+  tables: TableObject[] = [],
 ): boolean {
-  if (!canApplyLayerMove(paths, images, texts, selectedIds, move)) return false;
+  if (!canApplyLayerMove(paths, images, texts, selectedIds, move, tables)) return false;
 
-  const sorted = getSceneObjectsSorted(paths, images, texts);
+  const sorted = getSceneObjectsSorted(paths, images, texts, tables);
   const selected = new Set(selectedIds);
   const indices = selectedIndices(sorted, selectedIds);
   const minIdx = indices[0];

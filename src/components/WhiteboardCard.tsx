@@ -350,6 +350,9 @@ export function WhiteboardCard({
 
       <DeleteConfirmDialog
         open={deleteOpen}
+        title="화이트보드 삭제"
+        body={`「${board.title}」을(를) 삭제합니다. 삭제하면 영구적으로 제거되며, 다른 사용자 갤러리에서도 즉시 사라집니다.`}
+        confirmLabel="삭제"
         onConfirm={confirmDelete}
         onCancel={() => setDeleteOpen(false)}
       />

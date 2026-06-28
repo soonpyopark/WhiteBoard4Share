@@ -31,10 +31,13 @@
 
 /* ── Editor toolbar (row1: title/actions) ── */
 .editor-toolbar {
-  padding: 0.35rem 1rem;
-  min-height: 48px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  min-height: var(--app-header-min-height);
+  padding: var(--app-header-padding-y) var(--app-header-padding-x);
   background: #ffffff;
-  border-bottom: 1px solid #e2e6ed;
+  border-bottom: 1px solid #e1dfdd;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   flex-shrink: 0;
   z-index: 10;
@@ -46,6 +49,7 @@
   align-items: center;
   justify-content: flex-start;
   width: 100%;
+  min-height: var(--app-header-content-height);
   row-gap: 0.35rem;
 }
 
@@ -958,6 +962,194 @@
   overflow: hidden;
 }
 
+.canvas-table-editor-root {
+  position: absolute;
+  z-index: 20;
+}
+
+.canvas-table-editor {
+  box-sizing: border-box;
+  padding: 10px;
+  border: 2px solid #2563eb;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.18);
+}
+
+.canvas-table-editor__toolbar {
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.canvas-table-editor__toolbar button {
+  height: 24px;
+  padding: 0 0.5rem;
+  border: 1px solid #c8c6c4;
+  border-radius: 4px;
+  background: #ffffff;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.canvas-table-editor__toolbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.canvas-table-editor__size {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #605e5c;
+  align-self: center;
+}
+
+.canvas-table-editor__grid-wrap {
+  flex: 0 0 auto;
+  background: #ffffff;
+}
+
+.canvas-table-editor__grid {
+  width: 100%;
+  height: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  border: 1px solid var(--table-border-color, #605e5c);
+}
+
+.canvas-table-editor__grid th,
+.canvas-table-editor__grid td {
+  box-sizing: border-box;
+  border: none;
+  border-right: 1px solid var(--table-border-color, #605e5c);
+  border-bottom: 1px solid var(--table-border-color, #605e5c);
+  padding: 0;
+}
+
+.canvas-table-editor__grid td {
+  background: #ffffff;
+}
+
+.canvas-table-editor__corner,
+.canvas-table-editor__col-header,
+.canvas-table-editor__row-header {
+  position: relative;
+  padding: 0;
+  background: #f3f2f1;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #605e5c;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.canvas-table-editor__header-btn {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvas-table-editor__header-btn:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.canvas-table-editor__row-header .canvas-table-editor__header-btn {
+  height: calc(100% - 6px);
+}
+
+.canvas-table-editor__col-resize,
+.canvas-table-editor__row-resize {
+  position: absolute;
+  z-index: 2;
+  background: transparent;
+}
+
+.canvas-table-editor__col-resize {
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.canvas-table-editor__row-resize {
+  left: 0;
+  bottom: -3px;
+  width: 100%;
+  height: 6px;
+  cursor: row-resize;
+}
+
+.canvas-table-editor__menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 148px;
+  padding: 0.25rem;
+  border: 1px solid #c8c6c4;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.canvas-table-editor__menu button {
+  display: block;
+  width: 100%;
+  padding: 0.375rem 0.625rem;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.canvas-table-editor__menu button:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.canvas-table-editor__menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.canvas-table-editor__grid input {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  padding: 4px;
+  box-sizing: border-box;
+  outline: none;
+  font: inherit;
+  color: inherit;
+}
+
+.canvas-table-drag-preview {
+  position: absolute;
+  z-index: 15;
+  border: 2px dashed #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  pointer-events: none;
+}
+
+.table-options-popover {
+  width: 240px;
+  min-width: 240px;
+}
+
 .text-options-popover {
   width: 260px;
   min-width: 260px;
@@ -1167,6 +1359,81 @@
   text-decoration: underline;
 }
 
+.splash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(10, 26, 51, 0.55);
+  cursor: pointer;
+}
+
+.splash-overlay__panel {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: min(100%, 420px);
+  padding: 18px 22px;
+  border-radius: 16px;
+  background: #0a1a33;
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.splash-overlay__logo {
+  width: 68px;
+  height: 68px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.splash-overlay__content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.splash-overlay__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  pointer-events: none;
+}
+
+.splash-overlay__version {
+  font-size: 16px;
+  font-weight: 500;
+  color: #a8b4c4;
+}
+
+.splash-overlay__url {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: #a8b4c4;
+  line-height: 1.25;
+  text-decoration: none;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.splash-overlay__url:hover {
+  color: #d4deea;
+  text-decoration: underline;
+}
+
 .zoom-controls {
   position: absolute;
   right: 1rem;
@@ -1294,7 +1561,7 @@
 @media (max-width: 640px) {
   .editor-toolbar {
     gap: 0.5rem;
-    padding: 0.35rem 0.625rem;
+    padding: var(--app-header-padding-y) 0.75rem;
   }
 
   .editor-toolbar__title {

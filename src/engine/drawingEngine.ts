@@ -11,6 +11,7 @@ import {
   getSelectedObject,
   hitTestImage,
   hitTestSceneAt,
+  hitTestTable,
   hitTestText,
   hitAllSceneInLasso,
   moveSceneObject,
@@ -19,8 +20,18 @@ import {
 } from './sceneObject';
 import { createPathFromStroke, getPathWorldBounds } from './pathObject';
 import { renderLiveStroke, renderPath } from './pathRenderer';
-import { cloneImages, clonePaths, cloneTexts } from './sceneClone';
+import { cloneImages, clonePaths, cloneTables, cloneTexts } from './sceneClone';
+import {
+  createUniformColWidths,
+  createUniformRowHeights,
+  normalizeTableLayout,
+} from '../lib/table/tableDimensions';
 import { applyTextDimensions, measureTextContent, renderText, TEXT_LINE_HEIGHT } from './textRenderer';
+import {
+  applyTableDimensions,
+  createEmptyCells,
+  renderTable,
+} from './tableRenderer';
 import { pressureToWidth } from './pressure';
 import { getStylusCatmullSegments } from './strokeInput';
 import { catmullRomSpline } from './smoothing';
@@ -34,6 +45,7 @@ import type {
   PathObject,
   SceneObject,
   StrokePoint,
+  TableObject,
   TextObject,
   ToolPreset,
   Rect,
@@ -44,6 +56,7 @@ import {
   MIN_ZOOM,
   ZOOM_STEP_FACTOR,
   isImageObject,
+  isTableObject,
   isTextObject,
 } from './types';
 import {
@@ -55,14 +68,25 @@ import type { SceneSnapshot as CollabSceneSnapshot } from '../lib/collab/schema.
 
 type SelectionCallback = (selectedIds: string[]) => void;
 type PathsChangeCallback = () => void;
+type DeferredDrawChangeCallback = () => void;
 type SceneWriteCallback = (event: SceneWriteEvent | SceneWriteEvent[]) => void;
+
+export interface DeleteSelectedResult {
+  paths: string[];
+  images: string[];
+  texts: string[];
+  tables: string[];
+}
 type ZoomChangeCallback = (percent: number) => void;
 type HistoryChangeCallback = (state: { canUndo: boolean; canRedo: boolean }) => void;
+type RemoteTableUpsertCallback = (table: TableObject) => void;
+type RemoteTableDeleteCallback = (tableId: string) => void;
 
 interface SceneSnapshot {
   paths: PathObject[];
   images: ImageObject[];
   texts: TextObject[];
+  tables: TableObject[];
   selectedIds?: string[];
   /** @deprecated use selectedIds */
   selectedId?: string | null;
@@ -100,6 +124,7 @@ export class DrawingEngine {
   private paths: PathObject[] = [];
   private images: ImageObject[] = [];
   private texts: TextObject[] = [];
+  private tables: TableObject[] = [];
   private selectedIds: string[] = [];
   private isDrawing = false;
   private strokePoints: StrokePoint[] = [];
@@ -117,7 +142,14 @@ export class DrawingEngine {
   private onPathsChange: PathsChangeCallback | null = null;
   private onZoomChange: ZoomChangeCallback | null = null;
   private onHistoryChange: HistoryChangeCallback | null = null;
-  private onSceneWrite: SceneWriteCallback | null = null;
+  private onCollabPublish: SceneWriteCallback | null = null;
+  private onDeferredDrawChange: DeferredDrawChangeCallback | null = null;
+  /** 연필/볼펜/형광펜/지우개로만 생성·삭제된 경로 — 작성 내용 전송 전까지 동기화 보류 */
+  private deferredDrawPathIds = new Set<string>();
+  /** 지우개(획)로 로컬만 삭제된, 이미 공유됐을 수 있는 경로 */
+  private deferredDrawPathDeletes = new Set<string>();
+  private onRemoteTableUpsert: RemoteTableUpsertCallback | null = null;
+  private onRemoteTableDelete: RemoteTableDeleteCallback | null = null;
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
   private readonly maxHistory = 50;
@@ -128,6 +160,7 @@ export class DrawingEngine {
   private sceneCacheRenderedPaths = 0;
   private sceneCacheRenderedImages = 0;
   private sceneCacheRenderedTexts = 0;
+  private sceneCacheRenderedTables = 0;
   private sceneCacheViewKey = '';
   private dragBaseCache: HTMLCanvasElement | null = null;
   private dragBaseCacheCtx: CanvasRenderingContext2D | null = null;
@@ -136,6 +169,9 @@ export class DrawingEngine {
   private historyNotifyScheduled = false;
   private suppressPathsChange = false;
   private remoteUpdateDepth = 0;
+  private hiddenSceneObjectIds = new Set<string>();
+  private collabSceneSyncTimer: number | null = null;
+  private static readonly COLLAB_SCENE_SYNC_MS = 32;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d', { willReadFrequently: false });
@@ -159,8 +195,62 @@ export class DrawingEngine {
     this.onHistoryChange = cb;
   }
 
-  setOnSceneWrite(cb: SceneWriteCallback | null): void {
-    this.onSceneWrite = cb;
+  setOnCollabPublish(cb: SceneWriteCallback | null): void {
+    this.onCollabPublish = cb;
+    if (!cb) {
+      this.clearCollabSceneSyncTimer();
+    }
+  }
+
+  setOnDeferredDrawChange(cb: DeferredDrawChangeCallback | null): void {
+    this.onDeferredDrawChange = cb;
+  }
+
+  clearDeferredDrawState(): void {
+    this.deferredDrawPathIds.clear();
+    this.deferredDrawPathDeletes.clear();
+  }
+
+  snapshotDeferredDrawState(): { ids: Set<string>; deletes: Set<string> } {
+    return {
+      ids: new Set(this.deferredDrawPathIds),
+      deletes: new Set(this.deferredDrawPathDeletes),
+    };
+  }
+
+  hasDeferredDrawChanges(): boolean {
+    return this.deferredDrawPathIds.size > 0 || this.deferredDrawPathDeletes.size > 0;
+  }
+
+  buildHistoryCollabPatch(
+    before: CollabSceneSnapshot,
+    after: CollabSceneSnapshot,
+    deferredBefore?: { ids: Set<string>; deletes: Set<string> },
+  ): SceneWriteEvent | null {
+    const { upserts, deletes } = diffSceneSnapshots(before, after);
+    const skipPathId = (id: string) => {
+      const ids = deferredBefore?.ids ?? this.deferredDrawPathIds;
+      const dels = deferredBefore?.deletes ?? this.deferredDrawPathDeletes;
+      return ids.has(id) || dels.has(id);
+    };
+    const filteredUpserts = {
+      ...upserts,
+      paths: upserts.paths.filter((path) => !skipPathId(path.id)),
+    };
+    const filteredDeletes = {
+      ...deletes,
+      paths: deletes.paths.filter((id) => !skipPathId(id)),
+    };
+    if (isScenePatchEmpty(filteredUpserts, filteredDeletes)) return null;
+    return { type: 'scene-patch', upserts: filteredUpserts, deletes: filteredDeletes };
+  }
+
+  setOnRemoteTableUpsert(cb: RemoteTableUpsertCallback | null): void {
+    this.onRemoteTableUpsert = cb;
+  }
+
+  setOnRemoteTableDelete(cb: RemoteTableDeleteCallback | null): void {
+    this.onRemoteTableDelete = cb;
   }
 
   canUndo(): boolean {
@@ -175,8 +265,9 @@ export class DrawingEngine {
     paths: PathObject[],
     images: ImageObject[] = [],
     texts: TextObject[] = [],
+    tables: TableObject[] = [],
   ): Promise<void> {
-    await this.applyScene(paths, images, texts, { resetHistory: true, resetView: true });
+    await this.applyScene(paths, images, texts, tables, { resetHistory: true, resetView: true });
   }
 
   /** 협업 원격 변경 반영 — 저장/히스토리 알림 없이 씬만 갱신 */
@@ -184,10 +275,11 @@ export class DrawingEngine {
     paths: PathObject[],
     images: ImageObject[] = [],
     texts: TextObject[] = [],
+    tables: TableObject[] = [],
   ): Promise<void> {
     this.suppressPathsChange = true;
     try {
-      await this.applyScene(paths, images, texts, { resetHistory: false, resetView: false });
+      await this.applyScene(paths, images, texts, tables, { resetHistory: false, resetView: false });
     } finally {
       this.suppressPathsChange = false;
     }
@@ -201,7 +293,7 @@ export class DrawingEngine {
     this.remoteUpdateDepth = Math.max(0, this.remoteUpdateDepth - 1);
     if (this.remoteUpdateDepth === 0) {
       await preloadImages(this.images);
-      normalizeSceneZIndices(this.paths, this.images, this.texts);
+      normalizeSceneZIndices(this.paths, this.images, this.texts, this.tables);
       this.invalidateSceneCache();
       this.redraw();
     }
@@ -209,7 +301,7 @@ export class DrawingEngine {
 
   private commitRemoteVisualUpdate(): void {
     if (this.remoteUpdateDepth > 0) return;
-    normalizeSceneZIndices(this.paths, this.images, this.texts);
+    normalizeSceneZIndices(this.paths, this.images, this.texts, this.tables);
     this.invalidateSceneCache();
     this.redraw();
   }
@@ -298,16 +390,47 @@ export class DrawingEngine {
     }
   }
 
+  upsertRemoteTable(table: TableObject): void {
+    this.suppressPathsChange = true;
+    try {
+      const cloned = structuredClone(table);
+      const index = this.tables.findIndex((item) => item.id === cloned.id);
+      if (index >= 0) {
+        this.tables[index] = cloned;
+      } else {
+        this.tables.push(cloned);
+      }
+      this.commitRemoteVisualUpdate();
+      this.onRemoteTableUpsert?.(cloned);
+    } finally {
+      this.suppressPathsChange = false;
+    }
+  }
+
+  removeRemoteTable(tableId: string): void {
+    this.suppressPathsChange = true;
+    try {
+      this.tables = this.tables.filter((item) => item.id !== tableId);
+      this.selectedIds = this.selectedIds.filter((id) => id !== tableId);
+      this.commitRemoteVisualUpdate();
+      this.onRemoteTableDelete?.(tableId);
+    } finally {
+      this.suppressPathsChange = false;
+    }
+  }
+
   private async applyScene(
     paths: PathObject[],
     images: ImageObject[] = [],
     texts: TextObject[] = [],
+    tables: TableObject[] = [],
     options: { resetHistory: boolean; resetView: boolean },
   ): Promise<void> {
     this.paths = JSON.parse(JSON.stringify(paths)) as PathObject[];
     this.images = JSON.parse(JSON.stringify(images)) as ImageObject[];
     this.texts = JSON.parse(JSON.stringify(texts)) as TextObject[];
-    normalizeSceneZIndices(this.paths, this.images, this.texts);
+    this.tables = JSON.parse(JSON.stringify(tables)) as TableObject[];
+    normalizeSceneZIndices(this.paths, this.images, this.texts, this.tables);
     this.selectedIds = [];
     this.isDrawing = false;
     this.strokePoints = [];
@@ -347,6 +470,20 @@ export class DrawingEngine {
     return this.texts.find((text) => text.id === id) ?? null;
   }
 
+  getTablesSnapshot(): TableObject[] {
+    return cloneTables(this.tables);
+  }
+
+  getTableObject(id: string): TableObject | null {
+    return this.tables.find((table) => table.id === id) ?? null;
+  }
+
+  setHiddenSceneObjectIds(ids: readonly string[]): void {
+    this.hiddenSceneObjectIds = new Set(ids);
+    this.invalidateSceneCache();
+    this.redraw();
+  }
+
   getSelectedIds(): string[] {
     return [...this.selectedIds];
   }
@@ -356,12 +493,12 @@ export class DrawingEngine {
   }
 
   getSelectedObjects(): SceneObject[] {
-    return getObjectsByIds(this.paths, this.images, this.selectedIds, this.texts);
+    return getObjectsByIds(this.paths, this.images, this.selectedIds, this.texts, this.tables);
   }
 
   getSelectedObject(): SceneObject | null {
     if (this.selectedIds.length !== 1) return null;
-    return getSelectedObject(this.paths, this.images, this.selectedIds[0], this.texts);
+    return getSelectedObject(this.paths, this.images, this.selectedIds[0], this.texts, this.tables);
   }
 
   containsSelectedAt(x: number, y: number): boolean {
@@ -431,6 +568,14 @@ export class DrawingEngine {
 
     for (const text of this.texts) {
       const b = getObjectWorldBounds(text);
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.w);
+      maxY = Math.max(maxY, b.y + b.h);
+    }
+
+    for (const table of this.tables) {
+      const b = getObjectWorldBounds(table);
       minX = Math.min(minX, b.x);
       minY = Math.min(minY, b.y);
       maxX = Math.max(maxX, b.x + b.w);
@@ -581,6 +726,7 @@ export class DrawingEngine {
     this.paths = [];
     this.images = [];
     this.texts = [];
+    this.tables = [];
     this.selectedIds = [];
     this.notifySelection();
     this.invalidateSceneCache();
@@ -589,16 +735,16 @@ export class DrawingEngine {
   }
 
   canReorderSelected(move: LayerMove): boolean {
-    return canApplyLayerMove(this.paths, this.images, this.texts, this.selectedIds, move);
+    return canApplyLayerMove(this.paths, this.images, this.texts, this.selectedIds, move, this.tables);
   }
 
   reorderSelected(move: LayerMove): boolean {
-    if (!canApplyLayerMove(this.paths, this.images, this.texts, this.selectedIds, move)) {
+    if (!canApplyLayerMove(this.paths, this.images, this.texts, this.selectedIds, move, this.tables)) {
       return false;
     }
 
     this.recordHistory();
-    applyLayerMove(this.paths, this.images, this.texts, this.selectedIds, move);
+    applyLayerMove(this.paths, this.images, this.texts, this.selectedIds, move, this.tables);
     this.invalidateSceneCache();
     this.redraw();
     this.emitSceneObjects(this.getSelectedObjects());
@@ -606,16 +752,18 @@ export class DrawingEngine {
     return true;
   }
 
-  deleteSelected(): boolean {
-    if (this.selectedIds.length === 0) return false;
+  deleteSelected(): DeleteSelectedResult | null {
+    if (this.selectedIds.length === 0) return null;
     this.recordHistory();
     const removeIds = new Set(this.selectedIds);
     const pathDeletes = this.paths.filter((p) => removeIds.has(p.id)).map((p) => p.id);
     const imageDeletes = this.images.filter((i) => removeIds.has(i.id)).map((i) => i.id);
     const textDeletes = this.texts.filter((t) => removeIds.has(t.id)).map((t) => t.id);
+    const tableDeletes = this.tables.filter((t) => removeIds.has(t.id)).map((t) => t.id);
     this.paths = this.paths.filter((p) => !removeIds.has(p.id));
     this.images = this.images.filter((i) => !removeIds.has(i.id));
     this.texts = this.texts.filter((t) => !removeIds.has(t.id));
+    this.tables = this.tables.filter((t) => !removeIds.has(t.id));
     this.selectedIds = [];
     this.notifySelection();
     this.invalidateSceneCache();
@@ -624,9 +772,15 @@ export class DrawingEngine {
       ...pathDeletes.map((id) => ({ type: 'path-delete' as const, id })),
       ...imageDeletes.map((id) => ({ type: 'image-delete' as const, id })),
       ...textDeletes.map((id) => ({ type: 'text-delete' as const, id })),
+      ...tableDeletes.map((id) => ({ type: 'table-delete' as const, id })),
     ]);
     this.notifyPathsChange();
-    return true;
+    return {
+      paths: pathDeletes,
+      images: imageDeletes,
+      texts: textDeletes,
+      tables: tableDeletes,
+    };
   }
 
   updateSelectedColor(color: string): boolean {
@@ -679,7 +833,7 @@ export class DrawingEngine {
   }
 
   selectAt(x: number, y: number): boolean {
-    const hit = hitTestSceneAt(this.paths, this.images, x, y, this.texts);
+    const hit = hitTestSceneAt(this.paths, this.images, x, y, this.texts, this.tables);
     this.selectedIds = hit ? [hit.id] : [];
     this.notifySelection();
     this.redraw();
@@ -713,7 +867,7 @@ export class DrawingEngine {
 
   endLasso(): void {
     if (this.lassoPoints && this.lassoPoints.length >= 3) {
-      const hits = hitAllSceneInLasso(this.paths, this.images, this.lassoPoints, this.texts);
+      const hits = hitAllSceneInLasso(this.paths, this.images, this.lassoPoints, this.texts, this.tables);
       this.selectedIds = hits.map((obj) => obj.id);
       this.notifySelection();
     } else if (this.lassoPoints && this.lassoPoints.length > 0) {
@@ -728,7 +882,7 @@ export class DrawingEngine {
 
   beginMove(x: number, y: number): boolean {
     if (this.selectedIds.length === 0) {
-      const hit = hitTestSceneAt(this.paths, this.images, x, y, this.texts);
+      const hit = hitTestSceneAt(this.paths, this.images, x, y, this.texts, this.tables);
       if (!hit) {
         this.selectedIds = [];
         this.notifySelection();
@@ -738,7 +892,7 @@ export class DrawingEngine {
       this.selectedIds = [hit.id];
       this.notifySelection();
     } else if (!this.containsSelectedAt(x, y)) {
-      const hit = hitTestSceneAt(this.paths, this.images, x, y, this.texts);
+      const hit = hitTestSceneAt(this.paths, this.images, x, y, this.texts, this.tables);
       if (hit) {
         this.selectedIds = [hit.id];
         this.notifySelection();
@@ -765,6 +919,7 @@ export class DrawingEngine {
     this.moveDrag.lastX = x;
     this.moveDrag.lastY = y;
     this.redraw();
+    this.scheduleCollabSceneSync('selection');
   }
 
   endMove(): void {
@@ -773,11 +928,11 @@ export class DrawingEngine {
     this.clearDragBaseCache();
     this.invalidateSceneCache();
     this.redraw();
-    this.emitSceneObjects(this.getSelectedObjects());
+    this.flushCollabSceneSync(this.getSelectedObjects());
     this.notifyPathsChange();
   }
 
-  async addImage(src: string, x: number, y: number, width: number, height: number): Promise<void> {
+  async addImage(src: string, x: number, y: number, width: number, height: number): Promise<ImageObject> {
     this.recordHistory();
     const image: ImageObject = {
       id: createId(),
@@ -787,7 +942,7 @@ export class DrawingEngine {
       transform: { cx: x, cy: y, rotation: 0, scale: 1 },
     };
     await preloadImage(image.id, src);
-    image.zIndex = getNextZIndex(this.paths, this.images, this.texts);
+    image.zIndex = getNextZIndex(this.paths, this.images, this.texts, this.tables);
     this.images.push(image);
     this.selectedIds = [image.id];
     this.notifySelection();
@@ -795,6 +950,7 @@ export class DrawingEngine {
     this.redraw();
     this.emitSceneWrite({ type: 'image-upsert', image: structuredClone(image) });
     this.notifyPathsChange();
+    return image;
   }
 
   addText(
@@ -824,7 +980,7 @@ export class DrawingEngine {
         scale: 1,
       },
     };
-    text.zIndex = getNextZIndex(this.paths, this.images, this.texts);
+    text.zIndex = getNextZIndex(this.paths, this.images, this.texts, this.tables);
     this.texts.push(text);
     this.selectedIds = [text.id];
     this.notifySelection();
@@ -873,8 +1029,190 @@ export class DrawingEngine {
     return text;
   }
 
+  updateSelectedTableStyle(patch: {
+    fontFamily?: string;
+    fontSize?: number;
+    color?: string;
+    borderColor?: string;
+    cellWidth?: number;
+    cellHeight?: number;
+  }): boolean {
+    const obj = this.getSelectedObject();
+    if (!obj || !isTableObject(obj)) return false;
+
+    if (patch.fontFamily !== undefined) obj.fontFamily = patch.fontFamily;
+    if (patch.fontSize !== undefined) obj.fontSize = patch.fontSize;
+    if (patch.color !== undefined) obj.color = patch.color;
+    if (patch.borderColor !== undefined) obj.borderColor = patch.borderColor;
+    if (patch.cellWidth !== undefined) {
+      obj.cellWidth = patch.cellWidth;
+      obj.colWidths = createUniformColWidths(obj.cols, patch.cellWidth);
+    }
+    if (patch.cellHeight !== undefined) {
+      obj.cellHeight = patch.cellHeight;
+      obj.rowHeights = createUniformRowHeights(obj.rows, patch.cellHeight);
+    }
+    applyTableDimensions(obj);
+
+    this.invalidateSceneCache();
+    this.redraw();
+    this.emitSceneWrite({ type: 'table-upsert', table: structuredClone(obj) });
+    this.notifyPathsChange();
+    return true;
+  }
+
+  addTable(
+    topLeftX: number,
+    topLeftY: number,
+    rows: number,
+    cols: number,
+    style: {
+      fontFamily: string;
+      fontSize: number;
+      color: string;
+      borderColor: string;
+      cellWidth: number;
+      cellHeight: number;
+    },
+  ): TableObject {
+    this.recordHistory();
+    const layout = normalizeTableLayout(rows, cols, style.cellWidth, style.cellHeight);
+    const { width, height } = { width: layout.colWidths.reduce((a, b) => a + b, 0), height: layout.rowHeights.reduce((a, b) => a + b, 0) };
+    const table: TableObject = {
+      id: createId(),
+      rows,
+      cols,
+      cells: createEmptyCells(rows, cols),
+      cellWidth: style.cellWidth,
+      cellHeight: style.cellHeight,
+      colWidths: layout.colWidths,
+      rowHeights: layout.rowHeights,
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize,
+      color: style.color,
+      borderColor: style.borderColor,
+      width,
+      height,
+      transform: {
+        cx: topLeftX + width / 2,
+        cy: topLeftY + height / 2,
+        rotation: 0,
+        scale: 1,
+      },
+    };
+    table.zIndex = getNextZIndex(this.paths, this.images, this.texts, this.tables);
+    this.tables.push(table);
+    this.selectedIds = [table.id];
+    this.notifySelection();
+    this.invalidateSceneCache();
+    this.redraw();
+    this.emitSceneWrite({ type: 'table-upsert', table: structuredClone(table) });
+    this.notifyPathsChange();
+    return table;
+  }
+
+  updateTable(
+    id: string,
+    cells: string[][],
+    style?: {
+      fontFamily: string;
+      fontSize: number;
+      color: string;
+      borderColor: string;
+      cellWidth: number;
+      cellHeight: number;
+    },
+    layout?: {
+      colWidths: number[];
+      rowHeights: number[];
+    },
+  ): TableObject | null {
+    const table = this.tables.find((item) => item.id === id);
+    if (!table) return null;
+
+    const hasContent = cells.some((row) => row.some((cell) => cell.trim().length > 0));
+    if (!hasContent) {
+      this.recordHistory();
+      this.tables = this.tables.filter((item) => item.id !== id);
+      this.selectedIds = this.selectedIds.filter((selectedId) => selectedId !== id);
+      this.notifySelection();
+      this.invalidateSceneCache();
+      this.redraw();
+      this.emitSceneWrite({ type: 'table-delete', id });
+      this.notifyPathsChange();
+      return null;
+    }
+
+    this.recordHistory();
+    table.rows = cells.length;
+    table.cols = cells[0]?.length ?? table.cols;
+    table.cells = cells.map((row) => [...row]);
+    const defaultWidth = style?.cellWidth ?? table.cellWidth;
+    const defaultHeight = style?.cellHeight ?? table.cellHeight;
+    const normalized = normalizeTableLayout(
+      table.rows,
+      table.cols,
+      defaultWidth,
+      defaultHeight,
+      layout?.colWidths ?? table.colWidths,
+      layout?.rowHeights ?? table.rowHeights,
+    );
+    table.colWidths = normalized.colWidths;
+    table.rowHeights = normalized.rowHeights;
+    if (style) {
+      table.fontFamily = style.fontFamily;
+      table.fontSize = style.fontSize;
+      table.color = style.color;
+      table.borderColor = style.borderColor;
+      table.cellWidth = style.cellWidth;
+      table.cellHeight = style.cellHeight;
+    }
+    applyTableDimensions(table);
+    this.selectedIds = [table.id];
+    this.notifySelection();
+    this.invalidateSceneCache();
+    this.redraw();
+    this.emitSceneWrite({ type: 'table-upsert', table: structuredClone(table) });
+    this.notifyPathsChange();
+    return table;
+  }
+
+  resizeTable(id: string, rows: number, cols: number): TableObject | null {
+    const table = this.tables.find((item) => item.id === id);
+    if (!table) return null;
+
+    this.recordHistory();
+    const nextRows = Math.max(1, Math.min(20, rows));
+    const nextCols = Math.max(1, Math.min(20, cols));
+    const nextCells = createEmptyCells(nextRows, nextCols);
+    for (let row = 0; row < Math.min(nextRows, table.rows); row++) {
+      for (let col = 0; col < Math.min(nextCols, table.cols); col++) {
+        nextCells[row][col] = table.cells[row]?.[col] ?? '';
+      }
+    }
+    const normalized = normalizeTableLayout(
+      nextRows,
+      nextCols,
+      table.cellWidth,
+      table.cellHeight,
+      table.colWidths,
+      table.rowHeights,
+    );
+    table.rows = nextRows;
+    table.cols = nextCols;
+    table.cells = nextCells;
+    table.colWidths = normalized.colWidths;
+    table.rowHeights = normalized.rowHeights;
+    applyTableDimensions(table);
+    this.invalidateSceneCache();
+    this.redraw();
+    this.emitSceneWrite({ type: 'table-upsert', table: structuredClone(table) });
+    this.notifyPathsChange();
+    return table;
+  }
+
   hitTestSceneObjectAt(x: number, y: number): SceneObject | null {
-    return hitTestSceneAt(this.paths, this.images, x, y, this.texts);
+    return hitTestSceneAt(this.paths, this.images, x, y, this.texts, this.tables);
   }
 
   hitTestHandleAt(x: number, y: number): HandleId | null {
@@ -923,6 +1261,7 @@ export class DrawingEngine {
     }
 
     this.redraw();
+    this.scheduleCollabSceneSync('selected');
   }
 
   endHandleDrag(): void {
@@ -933,7 +1272,7 @@ export class DrawingEngine {
     this.invalidateSceneCache();
     this.redraw();
     if (selected) {
-      this.emitSceneObjects([selected]);
+      this.flushCollabSceneSync([selected]);
     }
     this.notifyPathsChange();
   }
@@ -1020,7 +1359,13 @@ export class DrawingEngine {
         this.paths = this.paths.filter((p) => !removeIds.has(p.id));
         this.selectedIds = this.selectedIds.filter((id) => !removeIds.has(id));
         this.notifySelection();
-        this.emitSceneWriteMany([...removeIds].map((id) => ({ type: 'path-delete' as const, id })));
+        for (const id of removeIds) {
+          if (!this.deferredDrawPathIds.has(id)) {
+            this.deferredDrawPathDeletes.add(id);
+          }
+          this.deferredDrawPathIds.delete(id);
+        }
+        this.notifyDeferredDrawChange();
         this.invalidateSceneCache();
         this.notifyPathsChange();
       }
@@ -1032,10 +1377,11 @@ export class DrawingEngine {
     const path = createPathFromStroke(rawPoints, options, preset);
 
     if (path) {
-      path.zIndex = getNextZIndex(this.paths, this.images, this.texts);
+      path.zIndex = getNextZIndex(this.paths, this.images, this.texts, this.tables);
       this.recordPathAdded(path);
       this.paths.push(path);
-      this.emitSceneWrite({ type: 'path-upsert', path: structuredClone(path) });
+      this.deferredDrawPathIds.add(path.id);
+      this.notifyDeferredDrawChange();
     }
 
     this.redraw();
@@ -1068,6 +1414,7 @@ export class DrawingEngine {
       this.ctx.scale(this.viewScale, this.viewScale);
       this.renderSceneObjects(this.ctx, this.getSelectedObjects());
       for (const selected of this.getSelectedObjects()) {
+        if (this.hiddenSceneObjectIds.has(selected.id)) continue;
         renderSelectionBox(this.ctx, selected);
       }
       if (this.lassoPoints && this.lassoPoints.length >= 2) {
@@ -1102,6 +1449,7 @@ export class DrawingEngine {
     }
 
     for (const selected of this.getSelectedObjects()) {
+      if (this.hiddenSceneObjectIds.has(selected.id)) continue;
       renderSelectionBox(this.ctx, selected);
     }
 
@@ -1120,7 +1468,7 @@ export class DrawingEngine {
   getCursorHint(
     worldX: number,
     worldY: number,
-    tool: 'select' | 'lasso' | 'hand' | 'draw' | 'image' | 'text',
+    tool: 'select' | 'lasso' | 'hand' | 'draw' | 'image' | 'text' | 'table',
     isPanning = false,
   ): string {
     if (tool === 'draw' || tool === 'image') return 'crosshair';
@@ -1135,7 +1483,7 @@ export class DrawingEngine {
 
     if (tool === 'lasso') return 'crosshair';
 
-    if (tool === 'text') return 'crosshair';
+    if (tool === 'text' || tool === 'table') return 'crosshair';
 
     if (this.selectedIds.length > 0 && this.containsSelectedAt(worldX, worldY)) {
       return 'pointer';
@@ -1151,6 +1499,7 @@ export class DrawingEngine {
   private objectContainsPoint(obj: SceneObject, x: number, y: number): boolean {
     if ('points' in obj) return hitTestPath(obj, x, y);
     if (isTextObject(obj)) return hitTestText(obj, x, y);
+    if (isTableObject(obj)) return hitTestTable(obj, x, y);
     return hitTestImage(obj, x, y);
   }
 
@@ -1174,13 +1523,91 @@ export class DrawingEngine {
   }
 
   private emitSceneWrite(event: SceneWriteEvent): void {
-    if (this.suppressPathsChange || !this.onSceneWrite) return;
-    this.onSceneWrite(event);
+    if (this.suppressPathsChange || !this.onCollabPublish) return;
+    this.trackRealtimePathPublish(event);
+    this.onCollabPublish(event);
+  }
+
+  private trackRealtimePathPublish(event: SceneWriteEvent): void {
+    if (event.type === 'path-upsert') {
+      this.deferredDrawPathIds.delete(event.path.id);
+      this.deferredDrawPathDeletes.delete(event.path.id);
+    } else if (event.type === 'path-delete') {
+      this.deferredDrawPathIds.delete(event.id);
+      this.deferredDrawPathDeletes.delete(event.id);
+    } else if (event.type === 'scene-patch') {
+      for (const path of event.upserts.paths) {
+        this.deferredDrawPathIds.delete(path.id);
+        this.deferredDrawPathDeletes.delete(path.id);
+      }
+      for (const id of event.deletes.paths) {
+        this.deferredDrawPathIds.delete(id);
+        this.deferredDrawPathDeletes.delete(id);
+      }
+    }
+  }
+
+  private buildSceneCollabEvents(objects: SceneObject[]): SceneWriteEvent[] {
+    const events: SceneWriteEvent[] = [];
+    for (const obj of objects) {
+      if ('points' in obj) {
+        events.push({ type: 'path-upsert', path: structuredClone(obj) });
+      } else if (isImageObject(obj)) {
+        events.push({ type: 'image-upsert', image: structuredClone(obj) });
+      } else if (isTextObject(obj)) {
+        events.push({ type: 'text-upsert', text: structuredClone(obj) });
+      } else if (isTableObject(obj)) {
+        events.push({ type: 'table-upsert', table: structuredClone(obj) });
+      }
+    }
+    return events;
+  }
+
+  private clearCollabSceneSyncTimer(): void {
+    if (this.collabSceneSyncTimer === null) return;
+    window.clearTimeout(this.collabSceneSyncTimer);
+    this.collabSceneSyncTimer = null;
+  }
+
+  private scheduleCollabSceneSync(mode: 'selection' | 'selected'): void {
+    if (this.suppressPathsChange || !this.onCollabPublish) return;
+    if (this.collabSceneSyncTimer !== null) return;
+
+    this.collabSceneSyncTimer = window.setTimeout(() => {
+      this.collabSceneSyncTimer = null;
+      const objects =
+        mode === 'selection'
+          ? this.getSelectedObjects()
+          : (() => {
+              const obj = this.getSelectedObject();
+              return obj ? [obj] : [];
+            })();
+      this.flushCollabSceneSync(objects);
+    }, DrawingEngine.COLLAB_SCENE_SYNC_MS);
+  }
+
+  private flushCollabSceneSync(objects: SceneObject[]): void {
+    this.clearCollabSceneSyncTimer();
+    if (this.suppressPathsChange || !this.onCollabPublish) return;
+
+    const events = this.buildSceneCollabEvents(objects);
+    if (events.length === 0) return;
+    for (const event of events) {
+      this.trackRealtimePathPublish(event);
+    }
+    this.onCollabPublish(events);
+  }
+
+  private notifyDeferredDrawChange(): void {
+    this.onDeferredDrawChange?.();
   }
 
   private emitSceneWriteMany(events: SceneWriteEvent[]): void {
-    if (this.suppressPathsChange || !this.onSceneWrite || events.length === 0) return;
-    this.onSceneWrite(events);
+    if (this.suppressPathsChange || !this.onCollabPublish || events.length === 0) return;
+    for (const event of events) {
+      this.trackRealtimePathPublish(event);
+    }
+    this.onCollabPublish(events);
   }
 
   private emitSceneObjects(objects: SceneObject[]): void {
@@ -1192,23 +1619,11 @@ export class DrawingEngine {
         events.push({ type: 'image-upsert', image: structuredClone(obj) });
       } else if (isTextObject(obj)) {
         events.push({ type: 'text-upsert', text: structuredClone(obj) });
+      } else if (isTableObject(obj)) {
+        events.push({ type: 'table-upsert', table: structuredClone(obj) });
       }
     }
     this.emitSceneWriteMany(events);
-  }
-
-  private captureSceneForWrite(): CollabSceneSnapshot {
-    return {
-      paths: this.getPathsSnapshot(),
-      images: this.getImagesSnapshot(),
-      texts: this.getTextsSnapshot(),
-    };
-  }
-
-  private emitSceneDiff(before: CollabSceneSnapshot, after: CollabSceneSnapshot): void {
-    const { upserts, deletes } = diffSceneSnapshots(before, after);
-    if (isScenePatchEmpty(upserts, deletes)) return;
-    this.emitSceneWrite({ type: 'scene-patch', upserts, deletes });
   }
 
   private notifyZoomChange(): void {
@@ -1217,11 +1632,9 @@ export class DrawingEngine {
 
   async undo(): Promise<boolean> {
     if (!this.canUndo()) return false;
-    const before = this.captureSceneForWrite();
     const entry = this.undoStack.pop()!;
     this.redoStack.push(entry);
     await this.revertHistoryEntry(entry);
-    this.emitSceneDiff(before, this.captureSceneForWrite());
     this.notifyPathsChange();
     this.notifyHistoryChange();
     return true;
@@ -1229,11 +1642,9 @@ export class DrawingEngine {
 
   async redo(): Promise<boolean> {
     if (!this.canRedo()) return false;
-    const before = this.captureSceneForWrite();
     const entry = this.redoStack.pop()!;
     this.undoStack.push(entry);
     await this.replayHistoryEntry(entry);
-    this.emitSceneDiff(before, this.captureSceneForWrite());
     this.notifyPathsChange();
     this.notifyHistoryChange();
     return true;
@@ -1244,6 +1655,7 @@ export class DrawingEngine {
       paths: this.getPathsSnapshot(),
       images: this.getImagesSnapshot(),
       texts: this.getTextsSnapshot(),
+      tables: this.getTablesSnapshot(),
       selectedIds: [...this.selectedIds],
     };
   }
@@ -1252,7 +1664,8 @@ export class DrawingEngine {
     this.paths = JSON.parse(JSON.stringify(snap.paths)) as PathObject[];
     this.images = JSON.parse(JSON.stringify(snap.images)) as ImageObject[];
     this.texts = JSON.parse(JSON.stringify(snap.texts ?? [])) as TextObject[];
-    normalizeSceneZIndices(this.paths, this.images, this.texts);
+    this.tables = JSON.parse(JSON.stringify(snap.tables ?? [])) as TableObject[];
+    normalizeSceneZIndices(this.paths, this.images, this.texts, this.tables);
     this.selectedIds = snap.selectedIds
       ? [...snap.selectedIds]
       : snap.selectedId
@@ -1296,10 +1709,14 @@ export class DrawingEngine {
   private async revertHistoryEntry(entry: HistoryEntry): Promise<void> {
     switch (entry.type) {
       case 'add-path':
+        this.deferredDrawPathIds.delete(entry.path.id);
         this.removePathsById([entry.path.id]);
         break;
       case 'remove-paths':
         this.restorePaths(entry.paths);
+        for (const path of entry.paths) {
+          this.deferredDrawPathDeletes.delete(path.id);
+        }
         break;
       case 'snapshot':
         await this.applySnapshot(entry.data);
@@ -1310,9 +1727,16 @@ export class DrawingEngine {
   private async replayHistoryEntry(entry: HistoryEntry): Promise<void> {
     switch (entry.type) {
       case 'add-path':
+        this.deferredDrawPathIds.add(entry.path.id);
         this.restorePaths([entry.path]);
         break;
       case 'remove-paths':
+        for (const path of entry.paths) {
+          if (!this.deferredDrawPathIds.has(path.id)) {
+            this.deferredDrawPathDeletes.add(path.id);
+          }
+          this.deferredDrawPathIds.delete(path.id);
+        }
         this.removePathsById(entry.paths.map((path) => path.id));
         break;
       case 'snapshot':
@@ -1325,7 +1749,7 @@ export class DrawingEngine {
     const removeIds = new Set(ids);
     this.paths = this.paths.filter((path) => !removeIds.has(path.id));
     this.selectedIds = this.selectedIds.filter((id) => !removeIds.has(id));
-    normalizeSceneZIndices(this.paths, this.images, this.texts);
+    normalizeSceneZIndices(this.paths, this.images, this.texts, this.tables);
     this.notifySelection();
     this.invalidateSceneCache();
     this.redraw();
@@ -1337,7 +1761,7 @@ export class DrawingEngine {
       if (this.paths.some((item) => item.id === cloned.id)) continue;
       this.paths.push(cloned);
     }
-    normalizeSceneZIndices(this.paths, this.images, this.texts);
+    normalizeSceneZIndices(this.paths, this.images, this.texts, this.tables);
     this.invalidateSceneCache();
     this.redraw();
   }
@@ -1369,6 +1793,7 @@ export class DrawingEngine {
     this.sceneCacheRenderedPaths = 0;
     this.sceneCacheRenderedImages = 0;
     this.sceneCacheRenderedTexts = 0;
+    this.sceneCacheRenderedTables = 0;
     this.sceneCacheViewKey = '';
   }
 
@@ -1402,10 +1827,13 @@ export class DrawingEngine {
     objects: readonly SceneObject[],
   ): void {
     for (const obj of objects) {
+      if (this.hiddenSceneObjectIds.has(obj.id)) continue;
       if ('points' in obj) {
         renderPath(ctx, obj);
       } else if (isTextObject(obj)) {
         renderText(ctx, obj);
+      } else if (isTableObject(obj)) {
+        renderTable(ctx, obj);
       } else {
         const htmlImg = getCachedImage(obj.id);
         if (htmlImg) renderImage(ctx, obj, htmlImg);
@@ -1492,25 +1920,29 @@ export class DrawingEngine {
       pathStart?: number;
       imageStart?: number;
       textStart?: number;
+      tableStart?: number;
       excludeIds?: ReadonlySet<string>;
     } = {},
   ): void {
     const pathStart = options.pathStart ?? 0;
     const imageStart = options.imageStart ?? 0;
     const textStart = options.textStart ?? 0;
+    const tableStart = options.tableStart ?? 0;
     const excludeIds = options.excludeIds;
 
     cacheCtx.save();
     cacheCtx.translate(this.viewOffsetX, this.viewOffsetY);
     cacheCtx.scale(this.viewScale, this.viewScale);
 
-    const sorted = getSceneObjectsSorted(this.paths, this.images, this.texts);
+    const sorted = getSceneObjectsSorted(this.paths, this.images, this.texts, this.tables);
     const pathIds = new Set(this.paths.slice(pathStart).map((path) => path.id));
     const imageIds = new Set(this.images.slice(imageStart).map((image) => image.id));
     const textIds = new Set(this.texts.slice(textStart).map((text) => text.id));
+    const tableIds = new Set(this.tables.slice(tableStart).map((table) => table.id));
 
     for (const obj of sorted) {
       if (excludeIds?.has(obj.id)) continue;
+      if (this.hiddenSceneObjectIds.has(obj.id)) continue;
 
       if ('points' in obj) {
         if (excludeIds || pathStart === 0 || pathIds.has(obj.id)) {
@@ -1519,6 +1951,10 @@ export class DrawingEngine {
       } else if (isTextObject(obj)) {
         if (excludeIds || textStart === 0 || textIds.has(obj.id)) {
           renderText(cacheCtx, obj);
+        }
+      } else if (isTableObject(obj)) {
+        if (excludeIds || tableStart === 0 || tableIds.has(obj.id)) {
+          renderTable(cacheCtx, obj);
         }
       } else if (excludeIds || imageStart === 0 || imageIds.has(obj.id)) {
         const htmlImg = getCachedImage(obj.id);
@@ -1540,12 +1976,18 @@ export class DrawingEngine {
     cacheCtx.restore();
     cacheCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
-    this.renderSceneObjectsToCache(cacheCtx, { pathStart: 0, imageStart: 0, textStart: 0 });
+    this.renderSceneObjectsToCache(cacheCtx, {
+      pathStart: 0,
+      imageStart: 0,
+      textStart: 0,
+      tableStart: 0,
+    });
 
     this.sceneCacheValid = true;
     this.sceneCacheRenderedPaths = this.paths.length;
     this.sceneCacheRenderedImages = this.images.length;
     this.sceneCacheRenderedTexts = this.texts.length;
+    this.sceneCacheRenderedTables = this.tables.length;
     this.sceneCacheViewKey = this.getSceneCacheViewKey();
   }
 
@@ -1560,8 +2002,9 @@ export class DrawingEngine {
     const pathsAdded = this.paths.length - this.sceneCacheRenderedPaths;
     const imagesAdded = this.images.length - this.sceneCacheRenderedImages;
     const textsAdded = this.texts.length - this.sceneCacheRenderedTexts;
+    const tablesAdded = this.tables.length - this.sceneCacheRenderedTables;
 
-    if (pathsAdded === 0 && imagesAdded === 0 && textsAdded === 0) {
+    if (pathsAdded === 0 && imagesAdded === 0 && textsAdded === 0 && tablesAdded === 0) {
       return;
     }
 
@@ -1569,9 +2012,11 @@ export class DrawingEngine {
       pathsAdded !== 1 ||
       imagesAdded !== 0 ||
       textsAdded !== 0 ||
+      tablesAdded !== 0 ||
       this.sceneCacheRenderedPaths > this.paths.length ||
       this.sceneCacheRenderedImages > this.images.length ||
-      this.sceneCacheRenderedTexts > this.texts.length
+      this.sceneCacheRenderedTexts > this.texts.length ||
+      this.sceneCacheRenderedTables > this.tables.length
     ) {
       this.rebuildSceneCache();
       return;
@@ -1582,10 +2027,12 @@ export class DrawingEngine {
       pathStart: this.sceneCacheRenderedPaths,
       imageStart: this.sceneCacheRenderedImages,
       textStart: this.sceneCacheRenderedTexts,
+      tableStart: this.sceneCacheRenderedTables,
     });
     this.sceneCacheRenderedPaths = this.paths.length;
     this.sceneCacheRenderedImages = this.images.length;
     this.sceneCacheRenderedTexts = this.texts.length;
+    this.sceneCacheRenderedTables = this.tables.length;
   }
 
   private renderPreviewDot(point: StrokePoint, options: DrawingOptions, preset: ToolPreset): void {

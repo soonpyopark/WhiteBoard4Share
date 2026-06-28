@@ -1,4 +1,4 @@
-import type { ImageObject, PathObject, TextObject } from './drawing.ts';
+import type { ImageObject, PathObject, TableObject, TextObject } from './drawing.ts';
 
 export interface WhiteboardDocument {
   id: string;
@@ -8,6 +8,7 @@ export interface WhiteboardDocument {
   paths: PathObject[];
   images?: ImageObject[];
   texts?: TextObject[];
+  tables?: TableObject[];
   thumbnail?: string;
   shareToken?: string;
   isPrivate?: boolean;
@@ -30,5 +31,6 @@ export interface SaveWhiteboardPayload {
   paths: PathObject[];
   images?: ImageObject[];
   texts?: TextObject[];
+  tables?: TableObject[];
   thumbnail?: string;
 }

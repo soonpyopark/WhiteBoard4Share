@@ -21,5 +21,9 @@ export function getCanvasHint(tool: Tool): string {
     return '텍스트: 클릭하여 입력 · 더블클릭으로 다시 편집 · Ctrl+Enter로 확정';
   }
 
+  if (tool === 'table') {
+    return '표: 드래그하여 크기 지정(행/열) · 클릭만 하면 3×3 · 더블클릭으로 편집 · 행+/열+로 크기 조절';
+  }
+
   return 'Wacom, XP-Pen 등 펜 타블렛의 필압이 자동으로 반영됩니다 · Space+드래그 또는 두 손가락으로 화면 이동 · 개체에서 우클릭 또는 0.5초 길게 눌러 순서 변경';
 }

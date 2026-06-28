@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { EditorView } from './components/EditorView';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { GalleryView } from './components/GalleryView';
 import { MadeByCredit } from './components/MadeByCredit';
 import { DeptSessionProvider, useDeptSession } from './context/DeptSessionContext';
@@ -7,6 +6,10 @@ import { fetchShareLinkInfo } from './api/share.ts';
 import { parseShareTokenFromHash } from './utils/shareLink.ts';
 import './App.css';
 import './Gallery.css';
+
+const EditorView = lazy(() =>
+  import('./components/EditorView').then((module) => ({ default: module.EditorView })),
+);
 
 type View =
   | { mode: 'gallery' }
@@ -83,16 +86,24 @@ function AppContent() {
         </div>
       )}
       {view.mode === 'editor' ? (
-        <EditorView
-          whiteboardId={view.id}
-          byDept={selectedDept}
-          shareToken={view.shareToken}
-          shareLinkMode={shareLinkMode}
-          onBack={() => {
-            if (shareLinkMode) return;
-            setView({ mode: 'gallery' });
-          }}
-        />
+        <Suspense
+          fallback={
+            <div className="editor-loading">
+              <p>화이트보드를 불러오는 중…</p>
+            </div>
+          }
+        >
+          <EditorView
+            whiteboardId={view.id}
+            byDept={selectedDept}
+            shareToken={view.shareToken}
+            shareLinkMode={shareLinkMode}
+            onBack={() => {
+              if (shareLinkMode) return;
+              setView({ mode: 'gallery' });
+            }}
+          />
+        </Suspense>
       ) : (
         !shareLinkMode && (
           <GalleryView

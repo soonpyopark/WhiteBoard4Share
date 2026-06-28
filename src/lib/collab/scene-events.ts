@@ -1,4 +1,4 @@
-import type { ImageObject, PathObject, TextObject } from '../../engine/types.ts';
+import type { ImageObject, PathObject, TableObject, TextObject } from '../../engine/types.ts';
 import type { SceneItemDeletes, SceneSnapshot } from './schema.ts';
 import { computeDeletedSceneIds } from './schema.ts';
 
@@ -9,6 +9,8 @@ export type SceneWriteEvent =
   | { type: 'image-delete'; id: string }
   | { type: 'text-upsert'; text: TextObject }
   | { type: 'text-delete'; id: string }
+  | { type: 'table-upsert'; table: TableObject }
+  | { type: 'table-delete'; id: string }
   | { type: 'scene-patch'; upserts: SceneSnapshot; deletes: SceneItemDeletes };
 
 function filterChanged<T extends { id: string }>(prevItems: T[], nextItems: T[]): T[] {
@@ -29,6 +31,7 @@ export function diffSceneSnapshots(
       paths: filterChanged(before.paths, after.paths),
       images: filterChanged(before.images, after.images),
       texts: filterChanged(before.texts, after.texts),
+      tables: filterChanged(before.tables, after.tables),
     },
   };
 }
@@ -41,8 +44,10 @@ export function isScenePatchEmpty(
     upserts.paths.length === 0 &&
     upserts.images.length === 0 &&
     upserts.texts.length === 0 &&
+    upserts.tables.length === 0 &&
     deletes.paths.length === 0 &&
     deletes.images.length === 0 &&
-    deletes.texts.length === 0
+    deletes.texts.length === 0 &&
+    deletes.tables.length === 0
   );
 }

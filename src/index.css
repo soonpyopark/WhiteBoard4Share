@@ -6,6 +6,13 @@
   padding: 0;
 }
 
+:root {
+  --app-header-padding-y: 0.75rem;
+  --app-header-padding-x: 1.5rem;
+  --app-header-content-height: 32px;
+  --app-header-min-height: calc(var(--app-header-padding-y) * 2 + var(--app-header-content-height));
+}
+
 html,
 body,
 #root {

@@ -55,7 +55,26 @@ export interface TextObject {
   zIndex?: number;
 }
 
-export type SceneObject = PathObject | ImageObject | TextObject;
+export interface TableObject {
+  id: string;
+  rows: number;
+  cols: number;
+  cells: string[][];
+  cellWidth: number;
+  cellHeight: number;
+  colWidths?: number[];
+  rowHeights?: number[];
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  borderColor: string;
+  width: number;
+  height: number;
+  transform: PathTransform;
+  zIndex?: number;
+}
+
+export type SceneObject = PathObject | ImageObject | TextObject | TableObject;
 
 export function isPathObject(obj: SceneObject): obj is PathObject {
   return 'points' in obj;
@@ -66,5 +85,9 @@ export function isImageObject(obj: SceneObject): obj is ImageObject {
 }
 
 export function isTextObject(obj: SceneObject): obj is TextObject {
-  return 'content' in obj && !('points' in obj) && !('src' in obj);
+  return 'content' in obj && !('points' in obj) && !('src' in obj) && !('cells' in obj);
+}
+
+export function isTableObject(obj: SceneObject): obj is TableObject {
+  return 'cells' in obj && Array.isArray((obj as TableObject).cells);
 }

@@ -11,9 +11,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1.5rem;
+  box-sizing: border-box;
+  min-height: var(--app-header-min-height);
+  padding: var(--app-header-padding-y) var(--app-header-padding-x);
   background: #ffffff;
   border-bottom: 1px solid #e1dfdd;
+  flex-shrink: 0;
 }
 
 .gallery-header-left {
@@ -22,10 +25,33 @@
   gap: 0.625rem;
 }
 
+.gallery-title-btn {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.gallery-title-btn:hover .gallery-title,
+.gallery-title-btn:focus-visible .gallery-title {
+  color: #4a6cf7;
+}
+
+.gallery-title-btn:focus-visible {
+  outline: 2px solid #4a6cf7;
+  outline-offset: 2px;
+}
+
 .gallery-title {
   font-size: 0.9375rem;
   font-weight: 600;
   color: #323130;
+  transition: color 0.15s;
 }
 
 .gallery-version {
@@ -101,6 +127,43 @@
 
 .gallery-auth-input {
   width: 120px;
+}
+
+.gallery-auth-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.gallery-auth-password-input {
+  width: 120px;
+  padding-right: 2rem;
+}
+
+.gallery-auth-password-toggle {
+  position: absolute;
+  right: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #605e5c;
+  padding: 0;
+  cursor: pointer;
+}
+
+.gallery-auth-password-toggle:hover {
+  color: #323130;
+  background: #f3f2f1;
+}
+
+.gallery-auth-password-toggle svg {
+  width: 16px;
+  height: 16px;
 }
 
 .gallery-auth-display-name {

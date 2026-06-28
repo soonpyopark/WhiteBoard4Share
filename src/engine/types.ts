@@ -1,9 +1,36 @@
-import type { DrawTool, EraserMode, ImageObject, LineEndStyle, PathObject, PathTransform, SceneObject, StrokePoint, TextObject } from '../../shared/drawing';
+import type {
+  DrawTool,
+  EraserMode,
+  ImageObject,
+  LineEndStyle,
+  PathObject,
+  PathTransform,
+  SceneObject,
+  StrokePoint,
+  TableObject,
+  TextObject,
+} from '../../shared/drawing';
 
-export type { DrawTool, EraserMode, ImageObject, LineEndStyle, PathObject, PathTransform, SceneObject, StrokePoint, TextObject };
-export { isImageObject, isPathObject, isTextObject } from '../../shared/drawing';
+export type {
+  DrawTool,
+  EraserMode,
+  ImageObject,
+  LineEndStyle,
+  PathObject,
+  PathTransform,
+  SceneObject,
+  StrokePoint,
+  TableObject,
+  TextObject,
+};
+export {
+  isImageObject,
+  isPathObject,
+  isTableObject,
+  isTextObject,
+} from '../../shared/drawing';
 
-export type Tool = DrawTool | 'select' | 'lasso' | 'hand' | 'image' | 'text';
+export type Tool = DrawTool | 'select' | 'lasso' | 'hand' | 'image' | 'text' | 'table';
 
 export interface LassoPoint {
   x: number;

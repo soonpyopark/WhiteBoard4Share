@@ -2,18 +2,24 @@ import type * as Y from 'yjs';
 import type { DrawingEngine } from '../../engine/drawingEngine.ts';
 import { syncEngineFromYdocDelta } from './bootstrap.ts';
 import {
+  applySceneEventsToDoc,
+  applySceneEventsToSnapshot,
   isSceneEmpty,
   LOCAL_ORIGIN,
   readSceneFromDoc,
   writeSceneToDoc,
   type SceneSnapshot,
 } from './schema.ts';
-import { YJS_IMAGES_KEY, YJS_PATHS_KEY, YJS_TEXTS_KEY } from './constants.ts';
+import type { TableObject } from '../../engine/types.ts';
+import type { SceneWriteEvent } from './scene-events.ts';
+import { YJS_IMAGES_KEY, YJS_PATHS_KEY, YJS_TABLES_KEY, YJS_TEXTS_KEY } from './constants.ts';
 
 const BULK_MAP_CHANGE_THRESHOLD = 4;
 
 export interface YdocMirror {
   publishScene: (scene: SceneSnapshot) => void;
+  publishTableUpsert: (table: TableObject) => void;
+  publishSceneEvents: (events: SceneWriteEvent[]) => void;
   syncSharedToEngine: () => Promise<void>;
   initEmptyTracking: () => void;
   getPathCount: () => number;
@@ -25,6 +31,7 @@ function cloneSceneSnapshot(scene: SceneSnapshot): SceneSnapshot {
     paths: structuredClone(scene.paths),
     images: structuredClone(scene.images),
     texts: structuredClone(scene.texts),
+    tables: structuredClone(scene.tables),
   };
 }
 
@@ -36,6 +43,7 @@ export function attachYdocMirror(ydoc: Y.Doc, engine: DrawingEngine): YdocMirror
   const pathsMap = ydoc.getMap(YJS_PATHS_KEY);
   const imagesMap = ydoc.getMap(YJS_IMAGES_KEY);
   const textsMap = ydoc.getMap(YJS_TEXTS_KEY);
+  const tablesMap = ydoc.getMap(YJS_TABLES_KEY);
 
   let lastScene: SceneSnapshot | null = null;
   let syncTimer: number | null = null;
@@ -83,22 +91,37 @@ export function attachYdocMirror(ydoc: Y.Doc, engine: DrawingEngine): YdocMirror
   pathsMap.observe(onSceneChange);
   imagesMap.observe(onSceneChange);
   textsMap.observe(onSceneChange);
+  tablesMap.observe(onSceneChange);
 
   return {
     publishScene: (scene) => {
       writeSceneToDoc(ydoc, scene);
       lastScene = cloneSceneSnapshot(scene);
     },
+    publishTableUpsert: (table) => {
+      const event = { type: 'table-upsert' as const, table: structuredClone(table) };
+      applySceneEventsToDoc(ydoc, event);
+      lastScene = lastScene
+        ? applySceneEventsToSnapshot(lastScene, event)
+        : cloneSceneSnapshot(readSceneFromDoc(ydoc));
+    },
+    publishSceneEvents: (events) => {
+      if (events.length === 0) return;
+      applySceneEventsToDoc(ydoc, events);
+      lastScene = lastScene
+        ? applySceneEventsToSnapshot(lastScene, events)
+        : cloneSceneSnapshot(readSceneFromDoc(ydoc));
+    },
     syncSharedToEngine: async () => {
       if (isSceneEmpty(ydoc)) {
-        lastScene = { paths: [], images: [], texts: [] };
+        lastScene = { paths: [], images: [], texts: [], tables: [] };
         return;
       }
       await runSync();
     },
     initEmptyTracking: () => {
       lastScene = isSceneEmpty(ydoc)
-        ? { paths: [], images: [], texts: [] }
+        ? { paths: [], images: [], texts: [], tables: [] }
         : cloneSceneSnapshot(readSceneFromDoc(ydoc));
     },
     getPathCount: () => pathsMap.size,
@@ -110,6 +133,7 @@ export function attachYdocMirror(ydoc: Y.Doc, engine: DrawingEngine): YdocMirror
       pathsMap.unobserve(onSceneChange);
       imagesMap.unobserve(onSceneChange);
       textsMap.unobserve(onSceneChange);
+      tablesMap.unobserve(onSceneChange);
       lastScene = null;
     },
   };

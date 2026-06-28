@@ -1,13 +1,14 @@
 import * as Y from 'yjs';
-import type { ImageObject, PathObject, TextObject } from '../../engine/types.ts';
+import type { ImageObject, PathObject, TableObject, TextObject } from '../../engine/types.ts';
 import type { SceneWriteEvent } from './scene-events.ts';
-import { YJS_IMAGES_KEY, YJS_PATHS_KEY, YJS_TEXTS_KEY } from './constants.ts';
+import { YJS_IMAGES_KEY, YJS_PATHS_KEY, YJS_TABLES_KEY, YJS_TEXTS_KEY } from './constants.ts';
 import { clonePlainValue } from './yvalue.ts';
 
 export interface SceneSnapshot {
   paths: PathObject[];
   images: ImageObject[];
   texts: TextObject[];
+  tables: TableObject[];
 }
 
 export const LOCAL_ORIGIN = 'local';
@@ -24,6 +25,10 @@ function getTextsMap(ydoc: Y.Doc): Y.Map<unknown> {
   return ydoc.getMap(YJS_TEXTS_KEY);
 }
 
+function getTablesMap(ydoc: Y.Doc): Y.Map<unknown> {
+  return ydoc.getMap(YJS_TABLES_KEY);
+}
+
 function readMapValues<T>(ymap: Y.Map<unknown>): T[] {
   const items: T[] = [];
   ymap.forEach((value) => {
@@ -38,6 +43,7 @@ export function readSceneFromDoc(ydoc: Y.Doc): SceneSnapshot {
     paths: readMapValues<PathObject>(getPathsMap(ydoc)),
     images: readMapValues<ImageObject>(getImagesMap(ydoc)),
     texts: readMapValues<TextObject>(getTextsMap(ydoc)),
+    tables: readMapValues<TableObject>(getTablesMap(ydoc)),
   };
 }
 
@@ -45,18 +51,25 @@ export function isSceneEmpty(ydoc: Y.Doc): boolean {
   return (
     getPathsMap(ydoc).size === 0 &&
     getImagesMap(ydoc).size === 0 &&
-    getTextsMap(ydoc).size === 0
+    getTextsMap(ydoc).size === 0 &&
+    getTablesMap(ydoc).size === 0
   );
 }
 
 export function isSnapshotEmpty(scene: SceneSnapshot): boolean {
-  return scene.paths.length === 0 && scene.images.length === 0 && scene.texts.length === 0;
+  return (
+    scene.paths.length === 0 &&
+    scene.images.length === 0 &&
+    scene.texts.length === 0 &&
+    scene.tables.length === 0
+  );
 }
 
 export interface SceneItemDeletes {
   paths: string[];
   images: string[];
   texts: string[];
+  tables: string[];
 }
 
 export function computeDeletedSceneIds(
@@ -64,17 +77,19 @@ export function computeDeletedSceneIds(
   next: SceneSnapshot,
 ): SceneItemDeletes {
   if (!previous) {
-    return { paths: [], images: [], texts: [] };
+    return { paths: [], images: [], texts: [], tables: [] };
   }
 
   const nextPathIds = new Set(next.paths.map((item) => item.id));
   const nextImageIds = new Set(next.images.map((item) => item.id));
   const nextTextIds = new Set(next.texts.map((item) => item.id));
+  const nextTableIds = new Set(next.tables.map((item) => item.id));
 
   return {
     paths: previous.paths.filter((item) => !nextPathIds.has(item.id)).map((item) => item.id),
     images: previous.images.filter((item) => !nextImageIds.has(item.id)).map((item) => item.id),
     texts: previous.texts.filter((item) => !nextTextIds.has(item.id)).map((item) => item.id),
+    tables: previous.tables.filter((item) => !nextTableIds.has(item.id)).map((item) => item.id),
   };
 }
 
@@ -83,10 +98,12 @@ export function mergeSceneToDoc(ydoc: Y.Doc, scene: SceneSnapshot): void {
     const pathsMap = getPathsMap(ydoc);
     const imagesMap = getImagesMap(ydoc);
     const textsMap = getTextsMap(ydoc);
+    const tablesMap = getTablesMap(ydoc);
 
     for (const item of scene.paths) pathsMap.set(item.id, item);
     for (const item of scene.images) imagesMap.set(item.id, item);
     for (const item of scene.texts) textsMap.set(item.id, item);
+    for (const item of scene.tables) tablesMap.set(item.id, item);
   }, LOCAL_ORIGIN);
 }
 
@@ -100,10 +117,12 @@ export function writeSceneToDoc(ydoc: Y.Doc, scene: SceneSnapshot): void {
     const pathsMap = getPathsMap(ydoc);
     const imagesMap = getImagesMap(ydoc);
     const textsMap = getTextsMap(ydoc);
+    const tablesMap = getTablesMap(ydoc);
 
     const nextPathIds = new Set(scene.paths.map((item) => item.id));
     const nextImageIds = new Set(scene.images.map((item) => item.id));
     const nextTextIds = new Set(scene.texts.map((item) => item.id));
+    const nextTableIds = new Set(scene.tables.map((item) => item.id));
 
     for (const key of Array.from(pathsMap.keys())) {
       if (!nextPathIds.has(key)) pathsMap.delete(key);
@@ -114,10 +133,14 @@ export function writeSceneToDoc(ydoc: Y.Doc, scene: SceneSnapshot): void {
     for (const key of Array.from(textsMap.keys())) {
       if (!nextTextIds.has(key)) textsMap.delete(key);
     }
+    for (const key of Array.from(tablesMap.keys())) {
+      if (!nextTableIds.has(key)) tablesMap.delete(key);
+    }
 
     for (const item of scene.paths) pathsMap.set(item.id, item);
     for (const item of scene.images) imagesMap.set(item.id, item);
     for (const item of scene.texts) textsMap.set(item.id, item);
+    for (const item of scene.tables) tablesMap.set(item.id, item);
   }, LOCAL_ORIGIN);
 }
 
@@ -126,6 +149,7 @@ export function clearSceneInDoc(ydoc: Y.Doc): void {
     getPathsMap(ydoc).clear();
     getImagesMap(ydoc).clear();
     getTextsMap(ydoc).clear();
+    getTablesMap(ydoc).clear();
   }, LOCAL_ORIGIN);
 }
 
@@ -140,6 +164,7 @@ export function applySceneEventsToDoc(
     const pathsMap = getPathsMap(ydoc);
     const imagesMap = getImagesMap(ydoc);
     const textsMap = getTextsMap(ydoc);
+    const tablesMap = getTablesMap(ydoc);
 
     for (const event of events) {
       switch (event.type) {
@@ -161,13 +186,21 @@ export function applySceneEventsToDoc(
         case 'text-delete':
           textsMap.delete(event.id);
           break;
+        case 'table-upsert':
+          tablesMap.set(event.table.id, event.table);
+          break;
+        case 'table-delete':
+          tablesMap.delete(event.id);
+          break;
         case 'scene-patch': {
           for (const id of event.deletes.paths) pathsMap.delete(id);
           for (const id of event.deletes.images) imagesMap.delete(id);
           for (const id of event.deletes.texts) textsMap.delete(id);
+          for (const id of event.deletes.tables) tablesMap.delete(id);
           for (const path of event.upserts.paths) pathsMap.set(path.id, path);
           for (const image of event.upserts.images) imagesMap.set(image.id, image);
           for (const text of event.upserts.texts) textsMap.set(text.id, text);
+          for (const table of event.upserts.tables) tablesMap.set(table.id, table);
           break;
         }
       }
@@ -186,6 +219,7 @@ export function applySceneEventsToSnapshot(
   const paths = new Map(scene.paths.map((item) => [item.id, item]));
   const images = new Map(scene.images.map((item) => [item.id, item]));
   const texts = new Map(scene.texts.map((item) => [item.id, item]));
+  const tables = new Map(scene.tables.map((item) => [item.id, item]));
 
   for (const event of events) {
     switch (event.type) {
@@ -207,13 +241,21 @@ export function applySceneEventsToSnapshot(
       case 'text-delete':
         texts.delete(event.id);
         break;
+      case 'table-upsert':
+        tables.set(event.table.id, event.table);
+        break;
+      case 'table-delete':
+        tables.delete(event.id);
+        break;
       case 'scene-patch':
         for (const id of event.deletes.paths) paths.delete(id);
         for (const id of event.deletes.images) images.delete(id);
         for (const id of event.deletes.texts) texts.delete(id);
+        for (const id of event.deletes.tables) tables.delete(id);
         for (const path of event.upserts.paths) paths.set(path.id, path);
         for (const image of event.upserts.images) images.set(image.id, image);
         for (const text of event.upserts.texts) texts.set(text.id, text);
+        for (const table of event.upserts.tables) tables.set(table.id, table);
         break;
     }
   }
@@ -222,5 +264,6 @@ export function applySceneEventsToSnapshot(
     paths: Array.from(paths.values()),
     images: Array.from(images.values()),
     texts: Array.from(texts.values()),
+    tables: Array.from(tables.values()),
   };
 }

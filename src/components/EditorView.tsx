@@ -9,7 +9,7 @@ import { MadeByCredit } from './MadeByCredit';
 import { Toolbar } from './Toolbar';
 import type { TextOptionsPopoverPlacement } from './TextOptionsPopover';
 import { getCanvasHint } from '../canvasHint';
-import type { DrawingEngine } from '../engine/drawingEngine';
+import type { DrawingEngine, DeleteSelectedResult } from '../engine/drawingEngine';
 import { generateThumbnail, downloadSceneAsPng } from '../engine/thumbnailRenderer';
 import { runWhenIdle } from '../utils/idle';
 import {
@@ -22,9 +22,20 @@ import {
 } from '../drawToolSettings';
 import { DEFAULT_ERASER_SETTINGS, type EraserSettings } from '../eraserSettings';
 import { DEFAULT_TEXT_TOOL_SETTINGS, settingsFromText, type TextToolSettings } from '../textToolSettings';
-import type { ImageObject, PathObject, TextObject, Tool } from '../engine/types';
-import { isTextObject } from '../engine/types';
+import {
+  DEFAULT_TABLE_TOOL_SETTINGS,
+  settingsFromTable,
+  type TableToolSettings,
+} from '../tableToolSettings';
+import type { ImageObject, PathObject, TableObject, TextObject, Tool } from '../engine/types';
+import { isImageObject, isTableObject, isTextObject } from '../engine/types';
 import type { WhiteboardDocument } from '../types/whiteboard';
+import { captureEngineScene } from '../lib/collab/bootstrap';
+import {
+  shouldShareSceneForHistoryDiff,
+} from '../lib/collab/publishHistory';
+import type { SceneSnapshot } from '../lib/collab/schema';
+import type { SceneWriteEvent } from '../lib/collab/scene-events';
 import { useYjsWhiteboard } from '../hooks/useYjsWhiteboard';
 import { useWhiteboardPresence } from '../hooks/useWhiteboardPresence';
 import { useDeptSession } from '../context/DeptSessionContext';
@@ -41,6 +52,31 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const SAVE_DEBOUNCE_MS = 2500;
 const THUMBNAIL_INTERVAL_MS = 30_000;
+
+function buildDeleteConfirmBody(engine: DrawingEngine | null): string | null {
+  if (!engine || engine.getSelectedIds().length === 0) return null;
+
+  let pathCount = 0;
+  let imageCount = 0;
+  let textCount = 0;
+  let tableCount = 0;
+
+  for (const obj of engine.getSelectedObjects()) {
+    if ('points' in obj) pathCount++;
+    else if (isImageObject(obj)) imageCount++;
+    else if (isTextObject(obj)) textCount++;
+    else if (isTableObject(obj)) tableCount++;
+  }
+
+  const parts: string[] = [];
+  if (imageCount > 0) parts.push(`이미지 ${imageCount}개`);
+  if (tableCount > 0) parts.push(`표 ${tableCount}개`);
+  if (textCount > 0) parts.push(`텍스트 ${textCount}개`);
+  if (pathCount > 0) parts.push(`그림 ${pathCount}개`);
+
+  if (parts.length === 0) return null;
+  return `선택한 ${parts.join(', ')}을(를) 삭제합니다. 되돌리기로 복구할 수 있습니다.`;
+}
 
 export function EditorView({
   whiteboardId,
@@ -63,6 +99,7 @@ export function EditorView({
   const [initialPaths, setInitialPaths] = useState<PathObject[]>([]);
   const [initialImages, setInitialImages] = useState<ImageObject[]>([]);
   const [initialTexts, setInitialTexts] = useState<TextObject[]>([]);
+  const [initialTables, setInitialTables] = useState<TableObject[]>([]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -73,9 +110,14 @@ export function EditorView({
   const [textSettings, setTextSettings] = useState<TextToolSettings>(() => ({
     ...DEFAULT_TEXT_TOOL_SETTINGS,
   }));
+  const [tableSettings, setTableSettings] = useState<TableToolSettings>(() => ({
+    ...DEFAULT_TABLE_TOOL_SETTINGS,
+  }));
   const [textOptionsPlacement, setTextOptionsPlacement] =
     useState<TextOptionsPopoverPlacement>('toolbar');
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmBody, setDeleteConfirmBody] = useState('');
 
   const engineRef = useRef<DrawingEngine | null>(null);
   const attachImageRef = useRef<((at?: { x: number; y: number }) => void) | null>(null);
@@ -129,6 +171,7 @@ export function EditorView({
         setInitialPaths(doc.paths);
         setInitialImages(doc.images ?? []);
         setInitialTexts(doc.texts ?? []);
+        setInitialTables(doc.tables ?? []);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '불러오기 실패');
@@ -160,6 +203,7 @@ export function EditorView({
     const paths = engine.getPathsSnapshot();
     const images = engine.getImagesSnapshot();
     const texts = engine.getTextsSnapshot();
+    const tables = engine.getTablesSnapshot();
 
     let thumbnail = docRef.current?.thumbnail;
     const shouldRefreshThumbnail =
@@ -167,7 +211,7 @@ export function EditorView({
       Date.now() - lastThumbnailAtRef.current >= THUMBNAIL_INTERVAL_MS;
 
     if (shouldRefreshThumbnail) {
-      thumbnail = generateThumbnail(paths, images, 320, 200, texts);
+      thumbnail = generateThumbnail(paths, images, 320, 200, texts, tables);
       lastThumbnailAtRef.current = Date.now();
     }
 
@@ -175,7 +219,7 @@ export function EditorView({
 
     try {
       const token = shareToken ?? docRef.current?.shareToken;
-      const doc = await saveWhiteboard(whiteboardId, { title, paths, images, texts, thumbnail }, token);
+      const doc = await saveWhiteboard(whiteboardId, { title, paths, images, texts, tables, thumbnail }, token);
       if (generation !== saveGenerationRef.current) return;
       docRef.current = doc;
       isDirtyRef.current = false;
@@ -198,11 +242,14 @@ export function EditorView({
 
   const handlePathsChange = useCallback(() => {
     isDirtyRef.current = true;
+    scheduleSave();
+  }, [scheduleSave]);
+
+  const handleDeferredDrawChange = useCallback(() => {
     if (collab.isReady) {
       collab.markUnsharedChanges();
     }
-    scheduleSave();
-  }, [collab.isReady, collab.markUnsharedChanges, scheduleSave]);
+  }, [collab.isReady, collab.markUnsharedChanges]);
 
   const drawSettings = isDrawSettingsTool(tool)
     ? drawSettingsByTool[tool]
@@ -216,6 +263,10 @@ export function EditorView({
         setTextSettings(settingsFromText(selected));
         return;
       }
+      if (selected && isTableObject(selected)) {
+        setTableSettings(settingsFromTable(selected));
+        return;
+      }
 
       const path = engineRef.current.getSelectedPath();
       if (path && path.tool !== 'eraser' && isDrawSettingsTool(path.tool)) {
@@ -227,6 +278,34 @@ export function EditorView({
         }));
       }
     }
+  }, []);
+
+  const handleTableEditStart = useCallback((existing: TableObject | null) => {
+    if (existing) {
+      setTableSettings(settingsFromTable(existing));
+      setTool('table');
+      setDrawOptionsOpen(true);
+      return;
+    }
+    setDrawOptionsOpen(false);
+  }, []);
+
+  const handleTableCellLiveSync = useCallback(
+    (table: TableObject) => {
+      if (collab.isReady) {
+        collab.publishTableUpsert(table);
+      }
+    },
+    [collab.isReady, collab.publishTableUpsert],
+  );
+
+  const handleTableEditEnd = useCallback(() => {
+    setDrawOptionsOpen(false);
+  }, []);
+
+  const handleTableAdded = useCallback(() => {
+    setTool('select');
+    setDrawOptionsOpen(false);
   }, []);
 
   const handleTextEditStart = useCallback((existing: TextObject | null) => {
@@ -294,6 +373,16 @@ export function EditorView({
       return;
     }
 
+    if (newTool === 'table') {
+      if (newTool === tool && drawOptionsOpen) {
+        setDrawOptionsOpen(false);
+        return;
+      }
+      setTool('table');
+      setDrawOptionsOpen(true);
+      return;
+    }
+
     setTool(newTool);
     setDrawOptionsOpen(false);
   };
@@ -315,6 +404,12 @@ export function EditorView({
     setEraserSettings((prev) => ({ ...prev, ...patch }));
   };
 
+  const handleTableSettingsChange = (patch: Partial<TableToolSettings>) => {
+    const nextSettings = { ...tableSettings, ...patch };
+    setTableSettings(nextSettings);
+    engineRef.current?.updateSelectedTableStyle(nextSettings);
+  };
+
   const handleTextSettingsChange = (patch: Partial<TextToolSettings>) => {
     const nextSettings = { ...textSettings, ...patch };
     setTextSettings(nextSettings);
@@ -332,9 +427,34 @@ export function EditorView({
     applyDrawSettingsToSelection(nextSettings, tool);
   };
 
-  const handleDelete = () => {
-    engineRef.current?.deleteSelected();
-  };
+  const handleCollabSceneEvents = useCallback(
+    (events: SceneWriteEvent[]) => {
+      if (!collab.isReady || events.length === 0) return;
+      collab.publishSceneEvents(events);
+    },
+    [collab.isReady, collab.publishSceneEvents],
+  );
+
+  const handleObjectDeleted = useCallback((_result: DeleteSelectedResult) => {
+    setSelectedIds([]);
+  }, []);
+
+  const handleDeleteRequest = useCallback(() => {
+    const body = buildDeleteConfirmBody(engineRef.current);
+    if (!body) return;
+    setDeleteConfirmBody(body);
+    setDeleteConfirmOpen(true);
+  }, []);
+
+  const handleDeleteConfirm = useCallback(() => {
+    const result = engineRef.current?.deleteSelected();
+    if (result) {
+      handleObjectDeleted(result);
+    }
+    setDeleteConfirmOpen(false);
+  }, [handleObjectDeleted]);
+
+  const handleDelete = handleDeleteRequest;
 
   const handleClear = () => {
     const engine = engineRef.current;
@@ -381,16 +501,57 @@ export function EditorView({
       engine.getImagesSnapshot(),
       title,
       engine.getTextsSnapshot(),
+      engine.getTablesSnapshot(),
     );
   };
 
+  const publishHistorySceneSync = useCallback(
+    (
+      before: SceneSnapshot,
+      after: SceneSnapshot,
+      deferredBefore: { ids: Set<string>; deletes: Set<string> },
+    ) => {
+      if (!collab.isReady) return;
+
+      if (shouldShareSceneForHistoryDiff(before, after)) {
+        collab.shareScene();
+        return;
+      }
+
+      const engine = engineRef.current;
+      if (!engine) return;
+
+      const patch = engine.buildHistoryCollabPatch(before, after, deferredBefore);
+      if (patch) {
+        collab.publishSceneEvents([patch]);
+      }
+    },
+    [collab.isReady, collab.publishSceneEvents, collab.shareScene],
+  );
+
   const handleUndo = useCallback(async () => {
-    await engineRef.current?.undo();
-  }, []);
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    const before = captureEngineScene(engine);
+    const deferredBefore = engine.snapshotDeferredDrawState();
+    const changed = await engine.undo();
+    if (!changed) return;
+
+    publishHistorySceneSync(before, captureEngineScene(engine), deferredBefore);
+  }, [publishHistorySceneSync]);
 
   const handleRedo = useCallback(async () => {
-    await engineRef.current?.redo();
-  }, []);
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    const before = captureEngineScene(engine);
+    const deferredBefore = engine.snapshotDeferredDrawState();
+    const changed = await engine.redo();
+    if (!changed) return;
+
+    publishHistorySceneSync(before, captureEngineScene(engine), deferredBefore);
+  }, [publishHistorySceneSync]);
 
   const handleHistoryChange = useCallback((state: { canUndo: boolean; canRedo: boolean }) => {
     setCanUndo(state.canUndo);
@@ -527,6 +688,15 @@ export function EditorView({
         onCancel={() => setClearConfirmOpen(false)}
       />
 
+      <DeleteConfirmDialog
+        open={deleteConfirmOpen}
+        title="개체 삭제"
+        body={deleteConfirmBody}
+        confirmLabel="삭제"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
+
       <main className="workspace">
         <div className="workspace-canvas-area">
           <DrawingToolsBar
@@ -534,6 +704,7 @@ export function EditorView({
             drawSettings={drawSettings}
             eraserSettings={eraserSettings}
             textSettings={textSettings}
+            tableSettings={tableSettings}
             drawOptionsOpen={drawOptionsOpen}
             textOptionsPlacement={textOptionsPlacement}
             canUndo={canUndo}
@@ -543,6 +714,7 @@ export function EditorView({
             onDrawSettingsChange={handleDrawSettingsChange}
             onEraserSettingsChange={handleEraserSettingsChange}
             onTextSettingsChange={handleTextSettingsChange}
+            onTableSettingsChange={handleTableSettingsChange}
             onDrawOptionsClose={() => setDrawOptionsOpen(false)}
             onUndo={() => void handleUndo()}
             onRedo={() => void handleRedo()}
@@ -556,18 +728,31 @@ export function EditorView({
           initialPaths={initialPaths}
           initialImages={initialImages}
           initialTexts={initialTexts}
+          initialTables={initialTables}
           textSettings={textSettings}
+          tableSettings={tableSettings}
           textOptionsOpen={tool === 'text' && drawOptionsOpen && textOptionsPlacement === 'editor'}
+          tableOptionsOpen={tool === 'table' && drawOptionsOpen}
           onTextSettingsChange={handleTextSettingsChange}
+          onTableSettingsChange={handleTableSettingsChange}
           onTextOptionsClose={() => setDrawOptionsOpen(false)}
+          onTableOptionsClose={() => setDrawOptionsOpen(false)}
           onSelectionChange={handleSelectionChange}
           onPathsChange={handlePathsChange}
+          onDeferredDrawChange={handleDeferredDrawChange}
           onHistoryChange={handleHistoryChange}
           attachImageRef={attachImageRef}
           onImageAdded={handleImageAdded}
           onTextAdded={handleTextAdded}
+          onTableAdded={handleTableAdded}
           onTextEditStart={handleTextEditStart}
           onTextEditEnd={handleTextEditEnd}
+          onTableEditStart={handleTableEditStart}
+          onTableEditEnd={handleTableEditEnd}
+          onTableCellLiveSync={handleTableCellLiveSync}
+          onDeleteRequest={handleDeleteRequest}
+          onObjectDeleted={handleObjectDeleted}
+          onCollabSceneEvents={handleCollabSceneEvents}
           remotePeers={presence.remotePeers}
           onCursorMove={presence.updateCursor}
           onCursorClear={presence.clearCursor}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import {
   copyWhiteboard,
   createShareLink,
@@ -13,8 +13,13 @@ import {
 import type { WhiteboardSummary } from '../types/whiteboard';
 import { GalleryAuthBar } from './GalleryAuthBar';
 import { HomeButton } from './HomeButton';
+import { SplashOverlay } from './SplashOverlay';
 import { WhiteboardCard } from './WhiteboardCard';
 import { useDeptSession } from '../context/DeptSessionContext';
+import { useGalleryCollab } from '../hooks/useGalleryCollab';
+import { documentToSummary } from '../lib/collab/gallery-sync';
+import { canViewWhiteboardInGallery } from '../../shared/auth';
+import { APP_CONFIG } from '../appConfig';
 
 interface GalleryViewProps {
   onOpen: (id: string) => void;
@@ -44,6 +49,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     authenticated,
     selectedDept,
     canCreateWhiteboard,
+    role,
     loading: sessionLoading,
   } = useDeptSession();
 
@@ -53,6 +59,8 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
   const [creating, setCreating] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [splashOpen, setSplashOpen] = useState(false);
+  const deletedBoardIdsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!authenticated) {
@@ -65,7 +73,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
       setLoading(true);
       setError(null);
       const list = await fetchWhiteboards();
-      setBoards(list);
+      setBoards(list.filter((board) => !deletedBoardIdsRef.current.has(board.id)));
     } catch (err) {
       setError(err instanceof Error ? err.message : '목록을 불러올 수 없습니다');
     } finally {
@@ -77,6 +85,65 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     if (sessionLoading) return;
     void load();
   }, [load, sessionLoading]);
+
+  const handleRemoteDelete = useCallback((id: string) => {
+    deletedBoardIdsRef.current.add(id);
+    setBoards((prev) => prev.filter((board) => board.id !== id));
+  }, []);
+
+  const handleDeletedIdsChange = useCallback((deletedIds: string[]) => {
+    deletedBoardIdsRef.current = new Set(deletedIds);
+    setBoards((prev) => prev.filter((board) => !deletedBoardIdsRef.current.has(board.id)));
+  }, []);
+
+  const handleRemoteCreate = useCallback((board: WhiteboardSummary) => {
+    if (deletedBoardIdsRef.current.has(board.id)) return;
+    setBoards((prev) => {
+      if (prev.some((item) => item.id === board.id)) return prev;
+      return [board, ...prev];
+    });
+  }, []);
+
+  const handleRemoteVisibility = useCallback(
+    (board: WhiteboardSummary) => {
+      if (deletedBoardIdsRef.current.has(board.id)) return;
+
+      const session = { role: role ?? 'user', byDept: selectedDept };
+      const canView = canViewWhiteboardInGallery(session, board, selectedDept);
+
+      setBoards((prev) => {
+        const index = prev.findIndex((item) => item.id === board.id);
+
+        if (!canView) {
+          if (index < 0) return prev;
+          return prev.filter((item) => item.id !== board.id);
+        }
+
+        if (index >= 0) {
+          return prev.map((item) =>
+            item.id === board.id
+              ? {
+                  ...item,
+                  ...board,
+                }
+              : item,
+          );
+        }
+
+        return [board, ...prev];
+      });
+    },
+    [role, selectedDept],
+  );
+
+  const { publishDelete, publishCreate, publishVisibility } = useGalleryCollab(
+    selectedDept,
+    authenticated && !sessionLoading,
+    handleRemoteDelete,
+    handleRemoteCreate,
+    handleRemoteVisibility,
+    handleDeletedIdsChange,
+  );
 
   const persistOrder = useCallback(async (nextBoards: WhiteboardSummary[]) => {
     try {
@@ -129,6 +196,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     setCreating(true);
     try {
       const doc = await createWhiteboard();
+      publishCreate(documentToSummary(doc));
       onCreate(doc.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : '생성에 실패했습니다');
@@ -140,7 +208,9 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
   const handleDelete = async (id: string) => {
     try {
       await deleteWhiteboard(id);
+      deletedBoardIdsRef.current.add(id);
       setBoards((prev) => prev.filter((b) => b.id !== id));
+      publishDelete(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : '삭제에 실패했습니다');
     }
@@ -210,6 +280,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
             : board,
         ),
       );
+      publishVisibility(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : '공유 설정 저장에 실패했습니다');
     }
@@ -224,12 +295,21 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
 
   return (
     <div className="gallery">
+      <SplashOverlay open={splashOpen} onClose={() => setSplashOpen(false)} />
       <header className="gallery-header">
         <div className="gallery-header-left">
           <HomeButton onAppHome={handleAppHome} />
-          <h1 className="gallery-title">
-            WhiteBoard4Share <span className="gallery-version">v1.0.1</span>
-          </h1>
+          <button
+            type="button"
+            className="gallery-title-btn"
+            onClick={() => setSplashOpen(true)}
+            aria-label={`${APP_CONFIG.title} 정보 보기`}
+          >
+            <span className="gallery-title">
+              {APP_CONFIG.title}{' '}
+              <span className="gallery-version">v{APP_CONFIG.version}</span>
+            </span>
+          </button>
         </div>
         <div className="gallery-header-actions">
           <GalleryAuthBar />

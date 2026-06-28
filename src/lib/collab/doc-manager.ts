@@ -14,6 +14,10 @@ export function roomNameForWhiteboard(whiteboardId: string, byDept: string): str
   return `wb-${byDept.trim()}-${whiteboardId.trim()}`;
 }
 
+export function roomNameForGallery(byDept: string): string {
+  return `gallery-${byDept.trim()}`;
+}
+
 export function destroyCollabSession(session: CollabSession): Promise<void> {
   return new Promise((resolve) => {
     session.wsProvider.disconnect();
@@ -23,9 +27,8 @@ export function destroyCollabSession(session: CollabSession): Promise<void> {
   });
 }
 
-export function createCollabSession(whiteboardId: string, byDept: string): CollabSession {
+function createCollabSessionForRoom(roomId: string): CollabSession {
   const ydoc = new Y.Doc();
-  const roomId = roomNameForWhiteboard(whiteboardId, byDept);
 
   const wsProvider = new WebsocketProvider(getYjsWebSocketUrl(), roomId, ydoc, {
     connect: true,
@@ -48,6 +51,14 @@ export function createCollabSession(whiteboardId: string, byDept: string): Colla
   };
 
   return session;
+}
+
+export function createCollabSession(whiteboardId: string, byDept: string): CollabSession {
+  return createCollabSessionForRoom(roomNameForWhiteboard(whiteboardId, byDept));
+}
+
+export function createGalleryCollabSession(byDept: string): CollabSession {
+  return createCollabSessionForRoom(roomNameForGallery(byDept));
 }
 
 export function getConnectedPeerCount(session: CollabSession): number {

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { DrawingEngine } from '../engine/drawingEngine';
 import type { LayerMove } from '../engine/sceneObject';
+import { isTableObject } from '../engine/types';
+import { exportTableToExcel } from '../lib/table/exportTableToExcel';
 
 interface SceneLayerMenuProps {
   x: number;
@@ -8,6 +10,7 @@ interface SceneLayerMenuProps {
   engineRef: React.MutableRefObject<DrawingEngine | null>;
   onClose: () => void;
   onChange: () => void;
+  onDeleteRequest?: () => void;
 }
 
 const MENU_ITEMS: { id: LayerMove; label: string }[] = [
@@ -17,7 +20,7 @@ const MENU_ITEMS: { id: LayerMove; label: string }[] = [
   { id: 'back', label: '맨 아래로' },
 ];
 
-export function SceneLayerMenu({ x, y, engineRef, onClose, onChange }: SceneLayerMenuProps) {
+export function SceneLayerMenu({ x, y, engineRef, onClose, onChange, onDeleteRequest }: SceneLayerMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -69,13 +72,22 @@ export function SceneLayerMenu({ x, y, engineRef, onClose, onChange }: SceneLaye
 
   const handleDelete = () => {
     const engine = engineRef.current;
-    if (!engine?.deleteSelected()) return;
-    onChange();
+    if (!engine || engine.getSelectedIds().length === 0) return;
     onClose();
+    onDeleteRequest?.();
   };
 
   const engine = engineRef.current;
   const hasSelection = (engine?.getSelectedIds().length ?? 0) > 0;
+  const selected = engine?.getSelectedObject() ?? null;
+  const canExportTable =
+    (engine?.getSelectedIds().length ?? 0) === 1 && selected !== null && isTableObject(selected);
+
+  const handleExportExcel = () => {
+    if (!selected || !isTableObject(selected)) return;
+    void exportTableToExcel(selected);
+    onClose();
+  };
 
   return (
     <div
@@ -101,6 +113,16 @@ export function SceneLayerMenu({ x, y, engineRef, onClose, onChange }: SceneLaye
         );
       })}
       <div className="scene-layer-menu__divider" role="separator" />
+      {canExportTable && (
+        <button
+          type="button"
+          role="menuitem"
+          className="scene-layer-menu__item"
+          onClick={handleExportExcel}
+        >
+          엑셀로 저장
+        </button>
+      )}
       <button
         type="button"
         role="menuitem"

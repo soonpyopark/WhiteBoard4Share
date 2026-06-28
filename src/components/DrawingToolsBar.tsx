@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from 'react';
 import type { Tool } from '../engine/types';
 import { EraserOptionsPopover } from './EraserOptionsPopover';
 import { TextOptionsPopover, type TextOptionsPopoverPlacement } from './TextOptionsPopover';
+import { TableOptionsPopover } from './TableOptionsPopover';
 import { ToolOptionsPopover } from './ToolOptionsPopover';
 import {
   isDrawSettingsTool,
@@ -10,12 +11,14 @@ import {
 } from '../drawToolSettings';
 import type { EraserSettings } from '../eraserSettings';
 import type { TextToolSettings } from '../textToolSettings';
+import type { TableToolSettings } from '../tableToolSettings';
 
 interface DrawingToolsBarProps {
   tool: Tool;
   drawSettings: DrawToolSettings;
   eraserSettings: EraserSettings;
   textSettings: TextToolSettings;
+  tableSettings: TableToolSettings;
   drawOptionsOpen: boolean;
   textOptionsPlacement: TextOptionsPopoverPlacement;
   canUndo: boolean;
@@ -25,6 +28,7 @@ interface DrawingToolsBarProps {
   onDrawSettingsChange: (patch: Partial<DrawToolSettings>) => void;
   onEraserSettingsChange: (patch: Partial<EraserSettings>) => void;
   onTextSettingsChange: (patch: Partial<TextToolSettings>) => void;
+  onTableSettingsChange: (patch: Partial<TableToolSettings>) => void;
   onDrawOptionsClose: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -139,6 +143,15 @@ function TextToolIcon() {
   );
 }
 
+function TableToolIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="4" y="5" width="16" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M4 10h16M4 15h16M10 5v14M15 5v14" stroke="currentColor" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
 const TOOLS: { id: Tool; label: string; icon: ReactNode }[] = [
   { id: 'text', label: '텍스트', icon: <TextToolIcon /> },
   { id: 'hand', label: '손 — 화면 이동', icon: '✋' },
@@ -149,6 +162,7 @@ const TOOLS: { id: Tool; label: string; icon: ReactNode }[] = [
   { id: 'highlighter', label: '형광펜', icon: '🖍️' },
   { id: 'eraser', label: '지우개', icon: '🧹' },
   { id: 'image', label: '사진 첨부', icon: <ImageAttachIcon /> },
+  { id: 'table', label: '표', icon: <TableToolIcon /> },
 ];
 
 export function DrawingToolsBar({
@@ -156,6 +170,7 @@ export function DrawingToolsBar({
   drawSettings,
   eraserSettings,
   textSettings,
+  tableSettings,
   drawOptionsOpen,
   textOptionsPlacement,
   canUndo,
@@ -165,6 +180,7 @@ export function DrawingToolsBar({
   onDrawSettingsChange,
   onEraserSettingsChange,
   onTextSettingsChange,
+  onTableSettingsChange,
   onDrawOptionsClose,
   onUndo,
   onRedo,
@@ -173,8 +189,10 @@ export function DrawingToolsBar({
   const drawAnchorRef = useRef<HTMLButtonElement | null>(null);
   const eraserAnchorRef = useRef<HTMLButtonElement | null>(null);
   const textAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const tableAnchorRef = useRef<HTMLButtonElement | null>(null);
   const showEraserOptions = tool === 'eraser' && drawOptionsOpen;
   const showTextOptions = tool === 'text' && drawOptionsOpen && textOptionsPlacement === 'toolbar';
+  const showTableOptions = tool === 'table' && drawOptionsOpen;
 
   return (
     <div className="canvas-tools-bar" aria-label="도구">
@@ -217,6 +235,9 @@ export function DrawingToolsBar({
                   }
                   if (id === 'text') {
                     textAnchorRef.current = el;
+                  }
+                  if (id === 'table') {
+                    tableAnchorRef.current = el;
                   }
                 }}
                 type="button"
@@ -264,6 +285,16 @@ export function DrawingToolsBar({
               anchorRef={textAnchorRef}
               placement="toolbar"
               open={showTextOptions}
+              onClose={onDrawOptionsClose}
+            />
+          )}
+
+          {showTableOptions && (
+            <TableOptionsPopover
+              settings={tableSettings}
+              onChange={onTableSettingsChange}
+              anchorRef={tableAnchorRef}
+              open={showTableOptions}
               onClose={onDrawOptionsClose}
             />
           )}
