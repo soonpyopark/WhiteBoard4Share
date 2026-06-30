@@ -78,8 +78,13 @@ if (fs.existsSync(envExampleSrc)) {
   fs.copyFileSync(envExampleSrc, path.join(finalOutDir, '.env.example'));
 }
 
+const firewallBatSrc = path.resolve('allow-firewall-inbound.bat');
+if (fs.existsSync(firewallBatSrc)) {
+  fs.copyFileSync(firewallBatSrc, path.join(finalOutDir, 'allow-firewall-inbound.bat'));
+}
+
 fs.rmSync(stagingOutDir, { recursive: true, force: true });
 
 console.log(
-  `\nDone. Copy this folder to USB and run WhiteBoard4Share.exe inside:\n  ${finalOutDir}\n  (whiteboard data: ${path.join(finalOutDir, 'data')})\n`,
+  `\nDone. Copy this folder to USB and run WhiteBoard4Share.exe inside:\n  ${finalOutDir}\n  (whiteboard data: ${path.join(finalOutDir, 'data')})\n  (LAN: copy .env.example to .env, set HOSTNAME=0.0.0.0, run allow-firewall-inbound.bat as admin)\n`,
 );
