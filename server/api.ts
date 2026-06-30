@@ -10,6 +10,9 @@ import {
 } from './auth.ts';
 import { canCreateWhiteboard, canViewWhiteboardInGallery } from '../shared/auth.ts';
 import { ensureDefaultDepartments, isValidDeptCode, listDepartments } from './dept.ts';
+import { getKeycloakConfig } from './keycloak/config.ts';
+import { createKeycloakRouter } from './keycloak/routes.ts';
+import { getHomeLinkConfig } from './myportal-home-link.ts';
 import {
   copyWhiteboard,
   createShareLink,
@@ -76,7 +79,27 @@ function sessionResponse(session: SessionPayload) {
     displayName: session.displayName,
     role: session.role,
     adminDept: session.adminDept,
+    source: session.source,
     canCreateWhiteboard: canCreateWhiteboard(session),
+  };
+}
+
+function authConfigResponse(req: Request) {
+  const kc = getKeycloakConfig();
+  const home = getHomeLinkConfig({
+    hostHeader:
+      (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers.host ?? null,
+    forwardedProto:
+      typeof req.headers['x-forwarded-proto'] === 'string'
+        ? req.headers['x-forwarded-proto']
+        : null,
+  });
+  return {
+    keycloakEnabled: kc.enabled,
+    keycloakLoginUrl: kc.enabled ? '/api/auth/keycloak/login' : null,
+    allowLocalLogin: kc.allowLocal,
+    homeUrl: home.url,
+    homeTarget: home.target,
   };
 }
 
@@ -116,15 +139,24 @@ export function createApiRouter(): Router {
 
   router.get('/auth/session', (req, res) => {
     const session = getSessionFromRequest(req);
+    const config = authConfigResponse(req);
     if (!session) {
-      res.json({ authenticated: false });
+      res.json({ authenticated: false, ...config });
       return;
     }
-    res.json(sessionResponse(session));
+    res.json({ ...sessionResponse(session), ...config });
   });
+
+  router.use('/auth/keycloak', createKeycloakRouter());
 
   router.post('/auth/login', async (req, res) => {
     try {
+      const kc = getKeycloakConfig();
+      if (kc.enabled && !kc.allowLocal) {
+        res.status(403).json({ error: 'Keycloak SSO 로그인을 사용하세요.' });
+        return;
+      }
+
       const { username, password, byDept, displayName } = req.body as {
         username?: string;
         password?: string;
@@ -163,9 +195,10 @@ export function createApiRouter(): Router {
         displayName: displayName?.trim() || authUser.username,
         role: authUser.role,
         adminDept: authUser.adminDept,
+        source: 'local' as const,
       };
       const token = createSessionToken(sessionInfo);
-      setAuthCookie(res, token);
+      setAuthCookie(res, token, req);
 
       res.json({ ok: true, ...sessionResponse({ ...sessionInfo, exp: 0 }) });
     } catch (err) {
@@ -198,9 +231,10 @@ export function createApiRouter(): Router {
         displayName: session.displayName,
         role: session.role,
         adminDept: session.adminDept,
+        source: session.source,
       };
       const token = createSessionToken(sessionInfo);
-      setAuthCookie(res, token);
+      setAuthCookie(res, token, req);
 
       res.json({ ok: true, ...sessionResponse({ ...sessionInfo, exp: 0 }) });
     } catch (err) {
@@ -209,8 +243,8 @@ export function createApiRouter(): Router {
     }
   });
 
-  router.post('/auth/logout', (_req, res) => {
-    clearAuthCookie(res);
+  router.post('/auth/logout', (req, res) => {
+    clearAuthCookie(res, req);
     res.json({ ok: true });
   });
 
@@ -245,9 +279,10 @@ export function createApiRouter(): Router {
         byDept: normalizedDept,
         displayName: trimmedName,
         role: 'user' as const,
+        source: 'local' as const,
       };
       const token = createSessionToken(sessionInfo);
-      setAuthCookie(res, token);
+      setAuthCookie(res, token, req);
 
       res.json({ ok: true, ...sessionResponse({ ...sessionInfo, exp: 0 }) });
     } catch (err) {

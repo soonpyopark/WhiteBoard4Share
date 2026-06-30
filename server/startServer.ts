@@ -8,6 +8,15 @@ import { getDistDir } from './paths.ts';
 import { attachYjsSyncToHttpServer, YJS_WS_PATH } from './yjs-sync.ts';
 
 let serverInstance: Server | null = null;
+let activePort: number | null = null;
+
+export function isServerRunning(): boolean {
+  return serverInstance !== null;
+}
+
+export function getActiveServerPort(): number | null {
+  return activePort;
+}
 
 export async function startServer(options?: { port?: number; hostname?: string }): Promise<number> {
   const distDir = getDistDir();
@@ -32,6 +41,7 @@ export async function startServer(options?: { port?: number; hostname?: string }
         const actualPort =
           typeof address === 'object' && address ? address.port : port;
         serverInstance = server;
+        activePort = actualPort;
         resolve(actualPort);
       });
 
@@ -58,4 +68,5 @@ export async function stopServer(): Promise<void> {
   });
 
   serverInstance = null;
+  activePort = null;
 }

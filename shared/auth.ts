@@ -1,4 +1,5 @@
 export type UserRole = 'super' | 'dept' | 'user';
+export type AuthSource = 'keycloak' | 'local';
 
 export interface AuthSessionInfo {
   username: string;
@@ -6,6 +7,7 @@ export interface AuthSessionInfo {
   displayName: string;
   role: UserRole;
   adminDept?: string;
+  source?: AuthSource;
 }
 
 export function canCreateWhiteboard(session: Pick<AuthSessionInfo, 'role' | 'byDept' | 'adminDept'>): boolean {

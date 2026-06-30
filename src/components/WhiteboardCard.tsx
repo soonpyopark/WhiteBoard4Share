@@ -275,7 +275,7 @@ export function WhiteboardCard({
                 title={board.shareToken ? '공유 링크 복사' : '공유 안 함'}
                 aria-pressed={!!board.shareToken}
               >
-                공유중
+                공유
               </button>
             </div>
           )}

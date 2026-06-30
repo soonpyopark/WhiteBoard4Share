@@ -20,8 +20,11 @@ export function GalleryAuthBar() {
     commitDisplayName,
     role,
     login,
+    loginWithKeycloak,
     logout,
     switchDept,
+    keycloakEnabled,
+    allowLocalLogin,
   } = useDeptSession();
 
   const [loginUsername, setLoginUsername] = useState('');
@@ -130,52 +133,65 @@ export function GalleryAuthBar() {
           </button>
         </div>
       ) : showAdminLogin ? (
-        <form className="gallery-auth-form" onSubmit={(event) => void handleLogin(event)}>
-          <input
-            type="text"
-            className="gallery-auth-input"
-            value={loginUsername}
-            onChange={(event) => setLoginUsername(event.target.value)}
-            placeholder="아이디"
-            autoComplete="username"
-            aria-label="관리자 아이디"
-          />
-          <div className="gallery-auth-password-wrap">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              className="gallery-auth-input gallery-auth-password-input"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="비밀번호"
-              autoComplete="current-password"
-              aria-label="관리자 비밀번호"
-            />
+        <div className="gallery-auth-form">
+          {keycloakEnabled ? (
             <button
               type="button"
-              className="gallery-auth-password-toggle"
-              onClick={() => setShowPassword((visible) => !visible)}
-              aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 표시'}
-              aria-pressed={showPassword}
+              className="gallery-auth-login gallery-auth-sso"
+              onClick={loginWithKeycloak}
             >
-              {showPassword ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                  <path d="M1 1l22 22" />
-                  <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              )}
+              SSO
             </button>
-          </div>
-          <button type="submit" className="gallery-auth-login" disabled={submitting}>
-            {submitting ? '로그인 중…' : '로그인'}
-          </button>
-        </form>
+          ) : null}
+          {allowLocalLogin ? (
+            <form className="gallery-auth-local-form" onSubmit={(event) => void handleLogin(event)}>
+              <input
+                type="text"
+                className="gallery-auth-input"
+                value={loginUsername}
+                onChange={(event) => setLoginUsername(event.target.value)}
+                placeholder="아이디"
+                autoComplete="username"
+                aria-label="관리자 아이디"
+              />
+              <div className="gallery-auth-password-wrap">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="gallery-auth-input gallery-auth-password-input"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="비밀번호"
+                  autoComplete="current-password"
+                  aria-label="관리자 비밀번호"
+                />
+                <button
+                  type="button"
+                  className="gallery-auth-password-toggle"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 표시'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                      <path d="M1 1l22 22" />
+                      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <button type="submit" className="gallery-auth-login" disabled={submitting}>
+                {submitting ? '로그인 중…' : '로그인'}
+              </button>
+            </form>
+          ) : null}
+        </div>
       ) : null}
 
       {error && (

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { GalleryView } from './components/GalleryView';
 import { MadeByCredit } from './components/MadeByCredit';
+import { AlertDialog } from './components/AlertDialog';
 import { DeptSessionProvider, useDeptSession } from './context/DeptSessionContext';
 import { fetchShareLinkInfo } from './api/share.ts';
 import { parseShareTokenFromHash } from './utils/shareLink.ts';
@@ -15,6 +16,13 @@ type View =
   | { mode: 'gallery' }
   | { mode: 'editor'; id: string; shareToken?: string };
 
+const SSO_ERROR_MESSAGES: Record<string, string> = {
+  invalid_state: 'SSO 인증 상태가 올바르지 않습니다. 다시 시도하세요.',
+  no_portal_role: '관리자 역할이 없습니다. Keycloak 역할 설정을 확인하세요.',
+  unknown_dept: '부서 정보를 확인할 수 없습니다.',
+  token_exchange_failed: 'SSO 토큰 교환에 실패했습니다.',
+};
+
 function AppContent() {
   const initialShareToken = parseShareTokenFromHash(
     typeof window !== 'undefined' ? window.location.hash : '',
@@ -23,8 +31,21 @@ function AppContent() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareLinkMode] = useState(() => !!initialShareToken);
   const [shareResolving, setShareResolving] = useState(() => !!initialShareToken);
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
   const { selectedDept, authenticated, loading: sessionLoading, switchDept } = useDeptSession();
   const shareHandledRef = useRef(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('auth_error');
+    if (!code) return;
+
+    setAuthErrorMessage(SSO_ERROR_MESSAGES[code] ?? 'SSO 로그인에 실패했습니다.');
+    params.delete('auth_error');
+    const query = params.toString();
+    const next = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', next);
+  }, []);
 
   const goAppHome = () => {
     if (shareLinkMode) return;
@@ -120,6 +141,12 @@ function AppContent() {
         )
       )}
       {view.mode === 'gallery' && !shareLinkMode && <MadeByCredit />}
+      <AlertDialog
+        open={authErrorMessage !== null}
+        title="SSO 로그인 실패"
+        body={authErrorMessage ?? ''}
+        onClose={() => setAuthErrorMessage(null)}
+      />
     </div>
   );
 }

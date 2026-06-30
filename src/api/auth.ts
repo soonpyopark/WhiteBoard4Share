@@ -1,5 +1,5 @@
 import { apiRequest } from './client.ts';
-import type { UserRole } from '../../shared/auth.ts';
+import type { AuthSource, UserRole } from '../../shared/auth.ts';
 
 export interface AuthSession {
   authenticated: boolean;
@@ -8,7 +8,13 @@ export interface AuthSession {
   displayName?: string;
   role?: UserRole;
   adminDept?: string;
+  source?: AuthSource;
   canCreateWhiteboard?: boolean;
+  keycloakEnabled?: boolean;
+  keycloakLoginUrl?: string | null;
+  allowLocalLogin?: boolean;
+  homeUrl?: string | null;
+  homeTarget?: 'self' | 'blank';
 }
 
 export interface AuthSessionResponse extends AuthSession {

@@ -32,7 +32,12 @@ interface DeptSessionContextValue {
   commitDisplayName: () => void;
   role: UserRole | null;
   canCreateWhiteboard: boolean;
+  keycloakEnabled: boolean;
+  allowLocalLogin: boolean;
+  homeUrl: string | null;
+  homeTarget: 'self' | 'blank';
   login: (username: string, password: string) => Promise<void>;
+  loginWithKeycloak: () => void;
   switchDept: (dept: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -50,8 +55,16 @@ function applyAuthSession(
     setDisplayName: (v: string) => void;
     setRole: (v: UserRole | null) => void;
     setCanCreateWhiteboard: (v: boolean) => void;
+    setKeycloakEnabled: (v: boolean) => void;
+    setAllowLocalLogin: (v: boolean) => void;
+    setHomeUrl: (v: string | null) => void;
+    setHomeTarget: (v: 'self' | 'blank') => void;
   },
 ) {
+  setters.setKeycloakEnabled(Boolean(session.keycloakEnabled));
+  setters.setAllowLocalLogin(session.allowLocalLogin ?? true);
+  setters.setHomeUrl(session.homeUrl ?? null);
+  setters.setHomeTarget(session.homeTarget ?? 'self');
   setters.setAuthenticated(session.authenticated);
 
   if (session.authenticated && session.byDept) {
@@ -83,6 +96,10 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
   const [displayName, setDisplayName] = useState(() => getOrCreateLocalUserName());
   const [role, setRole] = useState<UserRole | null>(null);
   const [canCreateWhiteboard, setCanCreateWhiteboard] = useState(false);
+  const [keycloakEnabled, setKeycloakEnabled] = useState(false);
+  const [allowLocalLogin, setAllowLocalLogin] = useState(true);
+  const [homeUrl, setHomeUrl] = useState<string | null>(null);
+  const [homeTarget, setHomeTarget] = useState<'self' | 'blank'>('self');
   const [loading, setLoading] = useState(true);
 
   const displayNameRef = useRef(displayName);
@@ -98,6 +115,10 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
       setDisplayName,
       setRole,
       setCanCreateWhiteboard,
+      setKeycloakEnabled,
+      setAllowLocalLogin,
+      setHomeUrl,
+      setHomeTarget,
     });
     roleRef.current = session.authenticated ? (session.role ?? 'user') : null;
   }, []);
@@ -207,14 +228,23 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
     [authenticated, applySession, joinAsUser],
   );
 
+  const loginWithKeycloak = useCallback(() => {
+    window.location.href = '/api/auth/keycloak/login';
+  }, []);
+
   const logout = useCallback(async () => {
+    if (keycloakEnabled && isAdminRole(roleRef.current)) {
+      window.location.href = '/api/auth/keycloak/logout';
+      return;
+    }
+
     await logoutRequest();
     setAuthenticated(false);
     setUsername('');
     setRole(null);
     setCanCreateWhiteboard(false);
     await joinAsUser(selectedDept, displayNameRef.current);
-  }, [joinAsUser, selectedDept]);
+  }, [joinAsUser, keycloakEnabled, selectedDept]);
 
   const value = useMemo(
     () => ({
@@ -228,7 +258,12 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
       commitDisplayName,
       role,
       canCreateWhiteboard,
+      keycloakEnabled,
+      allowLocalLogin,
+      homeUrl,
+      homeTarget,
       login,
+      loginWithKeycloak,
       switchDept,
       logout,
       refreshSession,
@@ -245,7 +280,12 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
       commitDisplayName,
       role,
       canCreateWhiteboard,
+      keycloakEnabled,
+      allowLocalLogin,
+      homeUrl,
+      homeTarget,
       login,
+      loginWithKeycloak,
       switchDept,
       logout,
       refreshSession,

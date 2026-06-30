@@ -231,6 +231,17 @@
   gap: 0.5rem;
 }
 
+.gallery-auth-local-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gallery-auth-sso {
+  min-width: 56px;
+}
+
 .gallery-auth-login {
   height: 32px;
   border: none;

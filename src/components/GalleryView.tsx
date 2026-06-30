@@ -51,6 +51,8 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     canCreateWhiteboard,
     role,
     loading: sessionLoading,
+    homeUrl,
+    homeTarget,
   } = useDeptSession();
 
   const [boards, setBoards] = useState<WhiteboardSummary[]>([]);
@@ -294,7 +296,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
       <SplashOverlay open={splashOpen} onClose={() => setSplashOpen(false)} />
       <header className="gallery-header">
         <div className="gallery-header-left">
-          <HomeButton onAppHome={handleAppHome} />
+          <HomeButton onAppHome={handleAppHome} homeUrl={homeUrl} homeTarget={homeTarget} />
           <button
             type="button"
             className="gallery-title-btn"

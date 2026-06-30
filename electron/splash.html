@@ -54,6 +54,15 @@
         pointer-events: none;
       }
 
+      .meta {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 400;
+        color: #8fa0b8;
+        line-height: 1.25;
+        pointer-events: none;
+      }
+
       .url {
         margin: 0;
         font-size: 11px;
@@ -76,6 +85,7 @@
       <img class="logo" src="splash-icon.png" alt="" />
       <div class="content">
         <h1 class="title" id="app-title">WhiteBoard4Share</h1>
+        <p class="meta" id="about-meta" hidden></p>
         <a class="url" id="blog-url" href="https://note4all.tistory.com">https://note4all.tistory.com</a>
       </div>
     </div>
@@ -96,6 +106,30 @@
           blogEl.textContent = blogUrl;
           blogEl.href = blogUrl;
         }
+      }
+
+      const mode = params.get('mode');
+      const version = params.get('version');
+      const author = params.get('author');
+      if (mode === 'about') {
+        const metaEl = document.getElementById('about-meta');
+        if (metaEl) {
+          const parts = [];
+          if (version) parts.push('v' + version);
+          if (author) parts.push(author);
+          if (parts.length > 0) {
+            metaEl.textContent = parts.join(' · ');
+            metaEl.hidden = false;
+          }
+        }
+        document.body.title = '클릭하면 닫힙니다';
+        document.body.addEventListener('click', (event) => {
+          if (event.target.closest('#blog-url')) return;
+          window.close();
+        });
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') window.close();
+        });
       }
     </script>
   </body>

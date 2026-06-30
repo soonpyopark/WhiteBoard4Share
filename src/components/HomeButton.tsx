@@ -2,15 +2,22 @@ import { navigateHome } from '../utils/navigateHome';
 
 interface HomeButtonProps {
   onAppHome?: () => void;
+  homeUrl?: string | null;
+  homeTarget?: 'self' | 'blank';
   className?: string;
 }
 
-export function HomeButton({ onAppHome, className = '' }: HomeButtonProps) {
+export function HomeButton({
+  onAppHome,
+  homeUrl,
+  homeTarget = 'self',
+  className = '',
+}: HomeButtonProps) {
   return (
     <button
       type="button"
       className={`home-btn ${className}`.trim()}
-      onClick={() => navigateHome(onAppHome)}
+      onClick={() => navigateHome({ runtimeHomeUrl: homeUrl, homeTarget, onAppHome })}
       title="홈"
       aria-label="홈"
     >

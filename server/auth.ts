@@ -164,16 +164,26 @@ export function getSessionFromRequest(req: Request): SessionPayload | null {
   return verifySessionToken(cookies[AUTH_COOKIE_NAME]);
 }
 
-export function setAuthCookie(res: Response, token: string): void {
+export function setAuthCookie(res: Response, token: string, req?: Request): void {
+  const secure = req ? cookieSecure(req) : false;
   res.setHeader(
     'Set-Cookie',
-    `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${AUTH_MAX_AGE_SEC}`,
+    `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${AUTH_MAX_AGE_SEC}${secure ? '; Secure' : ''}`,
   );
 }
 
-export function clearAuthCookie(res: Response): void {
+export function clearAuthCookie(res: Response, req?: Request): void {
+  const secure = req ? cookieSecure(req) : false;
   res.setHeader(
     'Set-Cookie',
-    `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+    `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? '; Secure' : ''}`,
   );
+}
+
+export function cookieSecure(req: Request): boolean {
+  if (process.env.COOKIE_SECURE === '0') return false;
+  if (process.env.COOKIE_SECURE === '1') return true;
+  const proto = req.headers['x-forwarded-proto'];
+  if (typeof proto === 'string') return proto.split(',')[0].trim() === 'https';
+  return false;
 }
