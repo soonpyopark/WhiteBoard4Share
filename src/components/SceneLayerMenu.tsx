@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { DrawingEngine } from '../engine/drawingEngine';
 import type { LayerMove } from '../engine/sceneObject';
-import { isTableObject } from '../engine/types';
+import { isImageObject, isTableObject } from '../engine/types';
+import { copyImageToClipboard, saveImageToFile } from '../lib/image/imageExportActions';
 import { exportTableToExcel } from '../lib/table/exportTableToExcel';
 
 interface SceneLayerMenuProps {
@@ -91,11 +92,33 @@ export function SceneLayerMenu({
   const selected = engine?.getSelectedObject() ?? null;
   const canExportTable =
     (engine?.getSelectedIds().length ?? 0) === 1 && selected !== null && isTableObject(selected);
+  const canExportImage =
+    (engine?.getSelectedIds().length ?? 0) === 1 && selected !== null && isImageObject(selected);
 
   const handleExportExcel = () => {
     if (!selected || !isTableObject(selected)) return;
     void exportTableToExcel(selected, whiteboardTitle);
     onClose();
+  };
+
+  const handleCopyImage = () => {
+    if (!selected || !isImageObject(selected)) return;
+    void copyImageToClipboard(selected).then(
+      () => onClose(),
+      () => {
+        window.alert('클립보드로 복사하지 못했습니다.');
+      },
+    );
+  };
+
+  const handleSaveImage = () => {
+    if (!selected || !isImageObject(selected)) return;
+    try {
+      saveImageToFile(selected, whiteboardTitle);
+      onClose();
+    } catch {
+      window.alert('이미지 파일로 저장하지 못했습니다.');
+    }
   };
 
   return (
@@ -131,6 +154,26 @@ export function SceneLayerMenu({
         >
           엑셀로 저장
         </button>
+      )}
+      {canExportImage && (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            className="scene-layer-menu__item"
+            onClick={handleCopyImage}
+          >
+            클립보드로 복사
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="scene-layer-menu__item"
+            onClick={handleSaveImage}
+          >
+            이미지 파일로 저장
+          </button>
+        </>
       )}
       <button
         type="button"
