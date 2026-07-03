@@ -53,6 +53,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     selectedDept,
     canCreateWhiteboard,
     role,
+    username,
     loading: sessionLoading,
     homeUrl,
     homeTarget,
@@ -86,10 +87,11 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [authenticated, selectedDept]);
+  }, [authenticated, selectedDept, role, username]);
 
   useEffect(() => {
     if (sessionLoading) return;
+    deletedBoardIdsRef.current.clear();
     setBoards([]);
     void load();
   }, [load, sessionLoading]);
