@@ -1,5 +1,5 @@
 import { type ReactNode, type RefObject } from 'react';
-import { truncateTitle, TITLE_SLOT_CHAR_COUNT } from '../utils/truncateText';
+import { truncateTitle, EDITOR_TITLE_SLOT_CHAR_COUNT } from '../utils/truncateText';
 
 interface ToolbarProps {
   title: string;
@@ -57,7 +57,7 @@ export function Toolbar({
           )}
           <div
             className="editor-toolbar__title"
-            style={{ '--title-slot-chars': TITLE_SLOT_CHAR_COUNT } as React.CSSProperties}
+            style={{ '--title-slot-chars': EDITOR_TITLE_SLOT_CHAR_COUNT } as React.CSSProperties}
           >
             {editingTitle ? (
               <input
@@ -124,9 +124,9 @@ export function Toolbar({
                 className="action-btn action-btn--wide share-btn"
                 onClick={onShare}
                 disabled={shareDisabled}
-                title="작성한 내용을 다른 사용자에게 전송"
+                title="작성한 내용을 저장하고 공유"
               >
-                작성 내용 전송
+                작성 내용 저장
               </button>
             </div>
             <div className="editor-toolbar__buttons-trailing">

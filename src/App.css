@@ -63,8 +63,8 @@
 }
 
 .editor-toolbar__title {
-  flex: 0 0 calc(var(--title-slot-chars, 13) * 1em);
-  width: calc(var(--title-slot-chars, 13) * 1em);
+  flex: 0 0 calc(var(--title-slot-chars, 23) * 1em);
+  width: calc(var(--title-slot-chars, 23) * 1em);
   font-size: 0.875rem;
   box-sizing: content-box;
 }
@@ -627,14 +627,14 @@
 }
 
 .share-btn {
-  color: #15803d;
-  background: #ecfdf5;
-  border-color: #bbf7d0;
+  color: #a16207;
+  background: #fefce8;
+  border-color: #fde68a;
 }
 
 .share-btn:hover {
-  background: #d1fae5;
-  border-color: #86efac;
+  background: #fef9c3;
+  border-color: #fcd34d;
 }
 
 .toolbar-section--tools {

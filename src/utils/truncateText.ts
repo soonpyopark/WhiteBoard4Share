@@ -1,8 +1,12 @@
-export const TITLE_MAX_CHARS = 10;
+/** 편집 화면 제목 표시 — 한글 기준 최대 글자 수 */
+export const EDITOR_TITLE_MAX_CHARS = 20;
 export const TITLE_ELLIPSIS = '...';
-export const TITLE_SLOT_CHAR_COUNT = TITLE_MAX_CHARS + TITLE_ELLIPSIS.length;
+export const EDITOR_TITLE_SLOT_CHAR_COUNT = EDITOR_TITLE_MAX_CHARS + TITLE_ELLIPSIS.length;
 
-export function truncateTitle(title: string, maxChars = TITLE_MAX_CHARS): {
+export const TITLE_MAX_CHARS = EDITOR_TITLE_MAX_CHARS;
+export const TITLE_SLOT_CHAR_COUNT = EDITOR_TITLE_SLOT_CHAR_COUNT;
+
+export function truncateTitle(title: string, maxChars = EDITOR_TITLE_MAX_CHARS): {
   display: string;
   truncated: boolean;
 } {
