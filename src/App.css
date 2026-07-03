@@ -615,6 +615,17 @@
   border-color: #93b8f5;
 }
 
+.file-export-btn {
+  color: #15803d;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.file-export-btn:hover {
+  background: #d1fae5;
+  border-color: #86efac;
+}
+
 .share-btn {
   color: #15803d;
   background: #ecfdf5;

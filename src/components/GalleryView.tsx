@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import {
   copyWhiteboard,
   createShareLink,
@@ -8,6 +8,7 @@ import {
   renameWhiteboard,
   reorderWhiteboards,
   revokeShareLink,
+  saveWhiteboard,
   updateShareVisibility,
 } from '../api/whiteboards';
 import type { WhiteboardSummary } from '../types/whiteboard';
@@ -18,6 +19,8 @@ import { WhiteboardCard } from './WhiteboardCard';
 import { useDeptSession } from '../context/DeptSessionContext';
 import { useGalleryCollab } from '../hooks/useGalleryCollab';
 import { documentToSummary, mergeGalleryBoardRemote } from '../lib/collab/gallery-sync';
+import { parseWhiteboardFile } from '../lib/whiteboard/whiteboardFile';
+import { WHITEBOARD_FILE_EXTENSION } from '../../shared/whiteboard-file';
 import { canViewWhiteboardInGallery } from '../../shared/auth';
 import { APP_CONFIG } from '../appConfig';
 
@@ -59,10 +62,12 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [splashOpen, setSplashOpen] = useState(false);
   const deletedBoardIdsRef = useRef<Set<string>>(new Set());
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     if (!authenticated) {
@@ -203,6 +208,31 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     }
   };
 
+  const handleImportClick = () => {
+    if (importing) return;
+    importInputRef.current?.click();
+  };
+
+  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || importing) return;
+
+    setImporting(true);
+    setError(null);
+    try {
+      const payload = await parseWhiteboardFile(file);
+      const doc = await createWhiteboard();
+      const saved = await saveWhiteboard(doc.id, payload);
+      publishCreate(documentToSummary(saved));
+      onCreate(saved.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '파일을 불러오지 못했습니다');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       await deleteWhiteboard(id);
@@ -337,17 +367,39 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
         ) : (
           <div className="gallery-grid">
             {canCreateWhiteboard && (
-              <button
-                type="button"
-                className="new-whiteboard-card"
-                onClick={handleCreate}
-                disabled={creating}
-              >
-                <span className="new-card-icon">+</span>
-                <span className="new-card-label">
-                  {creating ? '생성 중…' : '새 화이트보드'}
-                </span>
-              </button>
+              <>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept={`.wb4s,application/json,*${WHITEBOARD_FILE_EXTENSION}`}
+                  className="gallery-import-input"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  onChange={(event) => void handleImportFile(event)}
+                />
+                <button
+                  type="button"
+                  className="load-whiteboard-card"
+                  onClick={handleImportClick}
+                  disabled={importing}
+                >
+                  <span className="load-card-icon">↑</span>
+                  <span className="load-card-label">
+                    {importing ? '불러오는 중…' : '파일 불러오기'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="new-whiteboard-card"
+                  onClick={handleCreate}
+                  disabled={creating}
+                >
+                  <span className="new-card-icon">+</span>
+                  <span className="new-card-label">
+                    {creating ? '생성 중…' : '새 화이트보드'}
+                  </span>
+                </button>
+              </>
             )}
 
             {boards.map((board) => (

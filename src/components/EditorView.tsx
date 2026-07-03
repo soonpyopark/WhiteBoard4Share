@@ -12,6 +12,7 @@ import type { TableOptionsPopoverPlacement } from './TableOptionsPopover';
 import { getCanvasHint } from '../canvasHint';
 import type { DrawingEngine, DeleteSelectedResult } from '../engine/drawingEngine';
 import { generateThumbnail, downloadSceneAsPng } from '../engine/thumbnailRenderer';
+import { downloadWhiteboardFile } from '../lib/whiteboard/whiteboardFile';
 import { runWhenIdle } from '../utils/idle';
 import {
   DEFAULT_DRAW_TOOL_SETTINGS,
@@ -509,6 +510,23 @@ export function EditorView({
     );
   };
 
+  const handleExportFile = () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const paths = engine.getPathsSnapshot();
+    const images = engine.getImagesSnapshot();
+    const texts = engine.getTextsSnapshot();
+    const tables = engine.getTablesSnapshot();
+    downloadWhiteboardFile({
+      title,
+      paths,
+      images,
+      texts,
+      tables,
+      thumbnail: generateThumbnail(paths, images, 320, 200, texts, tables),
+    });
+  };
+
   const publishHistorySceneSync = useCallback(
     (
       before: SceneSnapshot,
@@ -666,6 +684,7 @@ export function EditorView({
         onCommitTitle={() => void commitTitle()}
         onCancelEditTitle={cancelEditTitle}
         onExportImage={handleExportImage}
+        onExportFile={handleExportFile}
         onShare={handleShare}
         shareDisabled={!collab.isReady || !collab.isWsConnected || !collab.isSynced}
         onDelete={handleDelete}

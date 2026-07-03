@@ -15,6 +15,7 @@ interface ToolbarProps {
   onCommitTitle: () => void;
   onCancelEditTitle: () => void;
   onExportImage: () => void;
+  onExportFile: () => void;
   onShare: () => void;
   shareDisabled?: boolean;
   onDelete: () => void;
@@ -36,6 +37,7 @@ export function Toolbar({
   onCommitTitle,
   onCancelEditTitle,
   onExportImage,
+  onExportFile,
   onShare,
   shareDisabled = false,
   onDelete,
@@ -135,6 +137,14 @@ export function Toolbar({
                 title="화이트보드를 PNG 이미지로 저장"
               >
                 이미지로 저장
+              </button>
+              <button
+                type="button"
+                className="action-btn action-btn--wide file-export-btn"
+                onClick={onExportFile}
+                title="화이트보드를 파일로 저장"
+              >
+                파일로 저장
               </button>
               <button
                 type="button"
