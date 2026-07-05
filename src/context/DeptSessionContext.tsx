@@ -303,3 +303,40 @@ export function useDeptSession(): DeptSessionContextValue {
   }
   return context;
 }
+
+/** EduCowork iframe embed — API/SSO 없이 표시 이름만 제공 */
+export function EmbedDeptSessionProvider({
+  userName,
+  children,
+}: {
+  userName: string;
+  children: ReactNode;
+}) {
+  const value = useMemo<DeptSessionContextValue>(
+    () => ({
+      departments: ['embed'],
+      selectedDept: 'embed',
+      setSelectedDept: () => {},
+      authenticated: true,
+      username: userName,
+      displayName: userName,
+      setDisplayName: () => {},
+      commitDisplayName: () => {},
+      role: 'user',
+      canCreateWhiteboard: false,
+      keycloakEnabled: false,
+      allowLocalLogin: false,
+      homeUrl: null,
+      homeTarget: 'self',
+      login: async () => {},
+      loginWithKeycloak: () => {},
+      switchDept: async () => {},
+      logout: async () => {},
+      refreshSession: async () => {},
+      loading: false,
+    }),
+    [userName],
+  );
+
+  return <DeptSessionContext.Provider value={value}>{children}</DeptSessionContext.Provider>;
+}

@@ -12,7 +12,8 @@ import type { TableOptionsPopoverPlacement } from './TableOptionsPopover';
 import { getCanvasHint } from '../canvasHint';
 import type { DrawingEngine, DeleteSelectedResult } from '../engine/drawingEngine';
 import { generateThumbnail, downloadSceneAsPng } from '../engine/thumbnailRenderer';
-import { downloadWhiteboardFile } from '../lib/whiteboard/whiteboardFile';
+import { downloadWhiteboardFile, buildWhiteboardFileDocument } from '../lib/whiteboard/whiteboardFile';
+import type { WhiteboardFileImportPayload } from '../../shared/whiteboard-file.ts';
 import { runWhenIdle } from '../utils/idle';
 import {
   DEFAULT_DRAW_TOOL_SETTINGS,
@@ -39,6 +40,7 @@ import {
 import type { SceneSnapshot } from '../lib/collab/schema';
 import type { SceneWriteEvent } from '../lib/collab/scene-events';
 import { useYjsWhiteboard } from '../hooks/useYjsWhiteboard';
+import { useYjsWhiteboardEmbed } from '../hooks/useYjsWhiteboardEmbed';
 import { useWhiteboardPresence } from '../hooks/useWhiteboardPresence';
 import { useDeptSession } from '../context/DeptSessionContext';
 
@@ -47,7 +49,22 @@ interface EditorViewProps {
   byDept: string;
   shareToken?: string;
   shareLinkMode?: boolean;
+  embedMode?: EditorEmbedMode;
   onBack: () => void;
+}
+
+export interface EditorEmbedMode {
+  initialPayload: WhiteboardFileImportPayload;
+  roomId: string;
+  syncServerUrl: string;
+  userName: string;
+  onReady?: (api: { exportDocument: () => string }) => void;
+  onCollabStatus?: (status: {
+    remotePeerCount: number;
+    isWsConnected: boolean;
+    isSynced: boolean;
+    isReady: boolean;
+  }) => void;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -85,9 +102,11 @@ export function EditorView({
   byDept,
   shareToken,
   shareLinkMode = false,
+  embedMode,
   onBack,
 }: EditorViewProps) {
-  const showBackButton = !shareLinkMode && !shareToken;
+  const isEmbed = Boolean(embedMode);
+  const showBackButton = !shareLinkMode && !shareToken && !isEmbed;
   const [tool, setTool] = useState<Tool>('pencil');
   const [drawSettingsByTool, setDrawSettingsByTool] = useState<
     Record<DrawSettingsTool, DrawToolSettings>
@@ -133,35 +152,54 @@ export function EditorView({
   const lastThumbnailAtRef = useRef(0);
   const persistRef = useRef<(options?: { forceThumbnail?: boolean }) => Promise<void>>(async () => {});
 
-  const collab = useYjsWhiteboard(whiteboardId, byDept);
+  const collabNormal = useYjsWhiteboard(whiteboardId, byDept, !isEmbed);
+  const collabEmbed = useYjsWhiteboardEmbed(
+    embedMode?.roomId ?? '',
+    embedMode?.syncServerUrl ?? '',
+    embedMode?.userName ?? '사용자',
+    isEmbed,
+  );
+  const collab = isEmbed ? collabEmbed : collabNormal;
   const { displayName } = useDeptSession();
-  const presence = useWhiteboardPresence(collab.collabSession, displayName);
+  const presence = useWhiteboardPresence(
+    collab.collabSession,
+    embedMode?.userName ?? displayName,
+  );
   const [engineInstanceId, setEngineInstanceId] = useState(0);
   const handleEngineInstance = useCallback((id: number) => {
     setEngineInstanceId(id);
   }, []);
 
   useEffect(() => {
+    if (isEmbed) return;
     setApiByDept(byDept);
-  }, [byDept]);
+  }, [byDept, isEmbed]);
 
   useEffect(() => {
-    if (loading || !docRef.current) return;
-
-    const tryBind = () => {
-      const engine = engineRef.current;
-      const doc = docRef.current;
-      if (!engine || !doc) return;
-
-      void collab.bindEngine(engine, doc).catch(() => {});
+    if (!embedMode) return;
+    const payload = embedMode.initialPayload;
+    docRef.current = {
+      id: 'embed',
+      title: payload.title,
+      paths: payload.paths,
+      images: payload.images,
+      texts: payload.texts,
+      tables: payload.tables,
+      thumbnail: payload.thumbnail,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
-
-    tryBind();
-    const interval = window.setInterval(tryBind, 200);
-    return () => window.clearInterval(interval);
-  }, [loading, collab.bindEngine, whiteboardId, engineInstanceId]);
+    setTitle(payload.title);
+    setInitialPaths(payload.paths);
+    setInitialImages(payload.images ?? []);
+    setInitialTexts(payload.texts ?? []);
+    setInitialTables(payload.tables ?? []);
+    setLoading(false);
+    setError(null);
+  }, [embedMode]);
 
   useEffect(() => {
+    if (isEmbed) return undefined;
     let cancelled = false;
 
     (async () => {
@@ -188,9 +226,71 @@ export function EditorView({
     return () => {
       cancelled = true;
     };
-  }, [whiteboardId, byDept, shareToken]);
+  }, [whiteboardId, byDept, shareToken, isEmbed]);
+
+  useEffect(() => {
+    if (loading || !docRef.current) return;
+
+    const tryBind = () => {
+      const engine = engineRef.current;
+      const doc = docRef.current;
+      if (!engine || !doc) return;
+
+      void collab.bindEngine(engine, doc).catch(() => {});
+    };
+
+    tryBind();
+    const interval = window.setInterval(tryBind, 200);
+    return () => window.clearInterval(interval);
+  }, [loading, collab.bindEngine, whiteboardId, engineInstanceId]);
+
+  useEffect(() => {
+    if (!embedMode?.onCollabStatus) return;
+    embedMode.onCollabStatus({
+      remotePeerCount: collab.remotePeerCount,
+      isWsConnected: collab.isWsConnected,
+      isSynced: collab.isSynced,
+      isReady: collab.isReady,
+    });
+  }, [
+    embedMode,
+    collab.remotePeerCount,
+    collab.isWsConnected,
+    collab.isSynced,
+    collab.isReady,
+  ]);
+
+  useEffect(() => {
+    if (!embedMode?.onReady || !collab.isReady) return;
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    embedMode.onReady({
+      exportDocument: () => {
+        const paths = engine.getPathsSnapshot();
+        const images = engine.getImagesSnapshot();
+        const texts = engine.getTextsSnapshot();
+        const tables = engine.getTablesSnapshot();
+        const doc = buildWhiteboardFileDocument({
+          title,
+          paths,
+          images,
+          texts,
+          tables,
+          thumbnail: generateThumbnail(paths, images, 320, 200, texts, tables),
+        });
+        return JSON.stringify(doc);
+      },
+    });
+  }, [embedMode, collab.isReady, title, engineInstanceId]);
 
   const persist = useCallback(async (options?: { forceThumbnail?: boolean }) => {
+    if (isEmbed) {
+      isDirtyRef.current = false;
+      setSaveStatus('saved');
+      return;
+    }
+
     const engine = engineRef.current;
     if (!engine) return;
     if (!isDirtyRef.current && !options?.forceThumbnail) return;
@@ -233,7 +333,7 @@ export function EditorView({
         setSaveStatus('error');
       }
     }
-  }, [whiteboardId, title, shareToken]);
+  }, [whiteboardId, title, shareToken, isEmbed]);
 
   persistRef.current = persist;
 
@@ -246,8 +346,8 @@ export function EditorView({
 
   const handlePathsChange = useCallback(() => {
     isDirtyRef.current = true;
-    scheduleSave();
-  }, [scheduleSave]);
+    if (!isEmbed) scheduleSave();
+  }, [scheduleSave, isEmbed]);
 
   const handleDeferredDrawChange = useCallback(() => {
     if (collab.isReady) {
@@ -623,6 +723,11 @@ export function EditorView({
     setEditingTitle(false);
     if (next === title) return;
 
+    if (isEmbed) {
+      setTitle(next);
+      return;
+    }
+
     const prevTitle = title;
     setTitle(next);
     setSaveStatus('saving');
@@ -686,6 +791,7 @@ export function EditorView({
         onExportImage={handleExportImage}
         onExportFile={handleExportFile}
         onShare={handleShare}
+        hideShare={isEmbed}
         shareDisabled={!collab.isReady || !collab.isWsConnected || !collab.isSynced}
         onDelete={handleDelete}
         onClear={handleClearRequest}
@@ -723,6 +829,7 @@ export function EditorView({
       <main className="workspace">
         <div className="workspace-canvas-area">
           <DrawingToolsBar
+            key={whiteboardId}
             tool={tool}
             drawSettings={drawSettings}
             eraserSettings={eraserSettings}

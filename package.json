@@ -1,13 +1,14 @@
 {
   "name": "whiteboard4share",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "WhiteBoard4Share",
   "author": "WhiteBoard4Share",
   "type": "module",
   "main": "electron-dist/main.cjs",
   "scripts": {
     "dev": "vite",
+    "dev:restart": "node scripts/dev-restart.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "start": "tsx server/index.ts",

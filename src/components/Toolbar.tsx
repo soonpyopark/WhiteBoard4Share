@@ -17,6 +17,7 @@ interface ToolbarProps {
   onExportImage: () => void;
   onExportFile: () => void;
   onShare: () => void;
+  hideShare?: boolean;
   shareDisabled?: boolean;
   onDelete: () => void;
   onClear: () => void;
@@ -39,6 +40,7 @@ export function Toolbar({
   onExportImage,
   onExportFile,
   onShare,
+  hideShare = false,
   shareDisabled = false,
   onDelete,
   onClear,
@@ -125,6 +127,7 @@ export function Toolbar({
                 onClick={onShare}
                 disabled={shareDisabled}
                 title="작성한 내용을 저장하고 공유"
+                hidden={hideShare}
               >
                 작성 내용 저장
               </button>

@@ -154,6 +154,8 @@ function TableToolIcon() {
 }
 
 const TOOLS_BAR_POSITION_KEY = 'whiteboard4share-tools-bar-position';
+const TOOLS_BAR_POSITION_MOBILE_KEY = 'whiteboard4share-tools-bar-position-mobile';
+const TOOLS_BAR_MOBILE_BREAKPOINT = 768;
 
 type ToolsBarDockSide = 'left' | 'right' | 'bottom' | null;
 
@@ -163,14 +165,39 @@ type ToolsBarPosition = {
   dock: ToolsBarDockSide;
 };
 
-function readStoredToolsBarPosition(): ToolsBarPosition | null {
+function useMobileToolsBar(): boolean {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia(`(max-width: ${TOOLS_BAR_MOBILE_BREAKPOINT}px)`).matches;
+  });
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(`(max-width: ${TOOLS_BAR_MOBILE_BREAKPOINT}px)`);
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  return isMobile;
+}
+
+function readStoredToolsBarPosition(mobile: boolean): ToolsBarPosition | null {
   if (typeof window === 'undefined') return null;
 
+  const storageKey = mobile ? TOOLS_BAR_POSITION_MOBILE_KEY : TOOLS_BAR_POSITION_KEY;
+
   try {
-    const raw = localStorage.getItem(TOOLS_BAR_POSITION_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ToolsBarPosition>;
     if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+      if (mobile) {
+        return { left: parsed.left, top: parsed.top, dock: null };
+      }
+
       const dock =
         parsed.dock === 'left' || parsed.dock === 'right' || parsed.dock === 'bottom'
           ? parsed.dock
@@ -186,6 +213,38 @@ function readStoredToolsBarPosition(): ToolsBarPosition | null {
   }
 
   return null;
+}
+
+function sameToolsBarPosition(a: ToolsBarPosition | null, b: ToolsBarPosition): boolean {
+  return a !== null && a.left === b.left && a.top === b.top && a.dock === b.dock;
+}
+
+function writeStoredToolsBarPosition(mobile: boolean, next: ToolsBarPosition): void {
+  try {
+    localStorage.setItem(
+      mobile ? TOOLS_BAR_POSITION_MOBILE_KEY : TOOLS_BAR_POSITION_KEY,
+      JSON.stringify(next),
+    );
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+function computeCenterToolsBarPosition(
+  bar: HTMLElement,
+  parent: HTMLElement,
+): ToolsBarPosition {
+  return clampToolsBarPosition(
+    (parent.clientWidth - bar.offsetWidth) / 2,
+    (parent.clientHeight - bar.offsetHeight) / 2,
+    null,
+    bar,
+    parent,
+  );
+}
+
+function normalizeToolsBarPosition(next: ToolsBarPosition, mobile: boolean): ToolsBarPosition {
+  return mobile ? { ...next, dock: null } : next;
 }
 
 const TOOLS_BAR_EDGE_THRESHOLD = 4;
@@ -291,6 +350,7 @@ export function DrawingToolsBar({
   onUndo,
   onRedo,
 }: DrawingToolsBarProps) {
+  const isMobileFloating = useMobileToolsBar();
   const barRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<{
     pointerId: number;
@@ -299,7 +359,9 @@ export function DrawingToolsBar({
     originLeft: number;
     originTop: number;
   } | null>(null);
-  const [position, setPosition] = useState<ToolsBarPosition | null>(() => readStoredToolsBarPosition());
+  const [position, setPosition] = useState<ToolsBarPosition | null>(() =>
+    isMobileFloating ? readStoredToolsBarPosition(true) : null,
+  );
   const isDraggingRef = useRef(false);
   const toolButtonRefs = useRef<Partial<Record<DrawSettingsTool, HTMLButtonElement | null>>>({});
   const drawAnchorRef = useRef<HTMLButtonElement | null>(null);
@@ -311,28 +373,19 @@ export function DrawingToolsBar({
   const showTableOptions =
     tool === 'table' && drawOptionsOpen && tableOptionsPlacement === 'toolbar';
 
-  const persistPosition = useCallback((next: ToolsBarPosition) => {
-    setPosition(next);
-    try {
-      localStorage.setItem(TOOLS_BAR_POSITION_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore quota errors */
-    }
-  }, []);
-
   const updatePosition = useCallback((next: ToolsBarPosition) => {
-    setPosition(next);
+    setPosition((current) => (sameToolsBarPosition(current, next) ? current : next));
   }, []);
 
   const syncBarLayout = useCallback(
     (next: ToolsBarPosition, persist = false) => {
-      if (persist) {
-        persistPosition(next);
-      } else {
-        setPosition(next);
+      const normalized = normalizeToolsBarPosition(next, isMobileFloating);
+      setPosition((current) => (sameToolsBarPosition(current, normalized) ? current : normalized));
+      if (persist && isMobileFloating) {
+        writeStoredToolsBarPosition(true, normalized);
       }
     },
-    [persistPosition],
+    [isMobileFloating],
   );
 
   const resolveBarLayout = useCallback(
@@ -341,28 +394,13 @@ export function DrawingToolsBar({
       const parent = bar?.offsetParent as HTMLElement | null;
       if (!bar || !parent) return;
 
-      const resolvedDock = dock ?? readDockSideFromGeometry(bar, parent, left, top);
+      const resolvedDock = isMobileFloating
+        ? null
+        : dock ?? readDockSideFromGeometry(bar, parent, left, top);
       const next = clampToolsBarPosition(left, top, resolvedDock, bar, parent);
-
-      if (
-        position &&
-        position.left === next.left &&
-        position.top === next.top &&
-        position.dock === next.dock
-      ) {
-        if (persist) {
-          try {
-            localStorage.setItem(TOOLS_BAR_POSITION_KEY, JSON.stringify(next));
-          } catch {
-            /* ignore quota errors */
-          }
-        }
-        return;
-      }
-
       syncBarLayout(next, persist);
     },
-    [position, syncBarLayout],
+    [isMobileFloating, syncBarLayout],
   );
 
   const getBarPosition = useCallback((): ToolsBarPosition | null => {
@@ -441,10 +479,31 @@ export function DrawingToolsBar({
   };
 
   useLayoutEffect(() => {
-    if (!position || isDraggingRef.current) return;
-    resolveBarLayout(position.left, position.top, position.dock, true);
-    // Mount-only correction for saved/clamped toolbar placement.
-  }, []);
+    if (isDraggingRef.current) return;
+
+    const bar = barRef.current;
+    const parent = bar?.offsetParent as HTMLElement | null;
+    if (!bar || !parent) return;
+
+    if (isMobileFloating) {
+      const applyMobileLayout = () => {
+        const stored = readStoredToolsBarPosition(true);
+        const next = normalizeToolsBarPosition(
+          stored ?? computeCenterToolsBarPosition(bar, parent),
+          true,
+        );
+        syncBarLayout(next, !stored);
+      };
+
+      applyMobileLayout();
+      if (!readStoredToolsBarPosition(true)) {
+        requestAnimationFrame(applyMobileLayout);
+      }
+      return;
+    }
+
+    setPosition(null);
+  }, [isMobileFloating, syncBarLayout]);
 
   useEffect(() => {
     if (!position) return;
@@ -458,8 +517,7 @@ export function DrawingToolsBar({
     return () => window.removeEventListener('resize', handleResize);
   }, [position, resolveBarLayout]);
 
-  const dockSide = position?.dock ?? null;
-  const useColumnLayout = dockSide === 'left' || dockSide === 'right';
+  const dockSide = isMobileFloating ? null : (position?.dock ?? null);
   const barStyle = position
     ? dockSide === 'bottom'
       ? {
@@ -471,10 +529,13 @@ export function DrawingToolsBar({
           top: `${position.top}px`,
           ...(dockSide === null ? { left: `${position.left}px` } : {}),
         }
-    : undefined;
+    : isMobileFloating && !position
+      ? { visibility: 'hidden' as const }
+      : undefined;
 
-  const positionClass =
-    dockSide === 'left'
+  const positionClass = isMobileFloating
+    ? ' canvas-tools-bar--floating canvas-tools-bar--mobile'
+    : dockSide === 'left'
       ? ' canvas-tools-bar--dock-left'
       : dockSide === 'right'
         ? ' canvas-tools-bar--dock-right'
@@ -485,7 +546,7 @@ export function DrawingToolsBar({
   return (
     <div
       ref={barRef}
-      className={`canvas-tools-bar${position ? positionClass : ''}${useColumnLayout ? ' canvas-tools-bar--column' : ''}`}
+      className={`canvas-tools-bar${position ? positionClass : ''}`}
       style={barStyle}
       aria-label="도구"
     >
@@ -502,6 +563,7 @@ export function DrawingToolsBar({
         >
           <DragHandleIcon />
         </button>
+        <div className={isMobileFloating ? 'canvas-tools-bar__tool-panel' : 'canvas-tools-bar__tools-flow'}>
         <div className="history-group" role="group" aria-label="실행 취소">
           <button
             type="button"
@@ -603,6 +665,7 @@ export function DrawingToolsBar({
               onClose={onDrawOptionsClose}
             />
           )}
+        </div>
         </div>
       </div>
     </div>

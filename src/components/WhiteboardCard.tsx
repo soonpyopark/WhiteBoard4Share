@@ -56,6 +56,24 @@ function LinkIcon() {
   );
 }
 
+function KeyIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="7.5" cy="15.5" r="5.5" />
+      <path d="m21 2-9.6 9.6" />
+      <path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4" />
+    </svg>
+  );
+}
+
 function TrashIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -234,8 +252,12 @@ export function WhiteboardCard({
                   });
                 }}
                 aria-pressed={board.isPrivate ?? false}
+                title="비공개"
+                aria-label="비공개"
               >
-                비공개
+                <span className="card-status-tag__label" aria-hidden="true">
+                  비
+                </span>
               </button>
               <button
                 type="button"
@@ -255,8 +277,12 @@ export function WhiteboardCard({
                 }}
                 disabled={!(board.isPrivate ?? false)}
                 aria-pressed={(board.isPrivate ?? false) && (board.isViewRestricted ?? false)}
+                title="열람제한"
+                aria-label="열람제한"
               >
-                열람제한
+                <span className="card-status-tag__icon card-status-tag__icon--key" aria-hidden="true">
+                  <KeyIcon />
+                </span>
               </button>
               <button
                 type="button"
@@ -274,8 +300,11 @@ export function WhiteboardCard({
                 disabled={!board.shareToken}
                 title={board.shareToken ? '공유 링크 복사' : '공유 안 함'}
                 aria-pressed={!!board.shareToken}
+                aria-label="공유"
               >
-                공유
+                <span className="card-status-tag__icon card-status-tag__icon--link" aria-hidden="true">
+                  <LinkIcon />
+                </span>
               </button>
             </div>
           )}

@@ -11,12 +11,40 @@
   --app-header-padding-x: 1.5rem;
   --app-header-content-height: 32px;
   --app-header-min-height: calc(var(--app-header-padding-y) * 2 + var(--app-header-content-height));
+  --app-viewport-height: 100vh;
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-right: env(safe-area-inset-right, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-safe-left: env(safe-area-inset-left, 0px);
 }
 
-html,
+@supports (height: 100svh) {
+  :root {
+    --app-viewport-height: 100svh;
+  }
+}
+
+html {
+  height: var(--app-viewport-height);
+  max-height: var(--app-viewport-height);
+  overflow: hidden;
+}
+
 body,
 #root {
   height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+html.wb4s-embed-mode,
+html.wb4s-embed-mode body,
+html.wb4s-embed-mode #root,
+html.wb4s-embed-mode .app-shell,
+html.wb4s-embed-mode .app.editor {
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
