@@ -28,7 +28,7 @@ function copyDirectory(from, to) {
 }
 
 const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
-const buildName = `WhiteBoard4Share-${pkg.version}-${formatTimestamp(new Date())}`;
+const buildName = `Whiteboard4Share-${pkg.version}-${formatTimestamp(new Date())}`;
 const finalOutDir = path.resolve('exe', buildName);
 const stagingOutDir = path.join(os.tmpdir(), `wb-exe-build-${buildName}`);
 
@@ -86,5 +86,5 @@ if (fs.existsSync(firewallBatSrc)) {
 fs.rmSync(stagingOutDir, { recursive: true, force: true });
 
 console.log(
-  `\nDone. Copy this folder to USB and run WhiteBoard4Share.exe inside:\n  ${finalOutDir}\n  (whiteboard data: ${path.join(finalOutDir, 'data')})\n  (LAN: copy .env.example to .env, set HOSTNAME=0.0.0.0, run allow-firewall-inbound.bat as admin)\n`,
+  `\nDone. Copy this folder to USB and run Whiteboard4Share.exe inside:\n  ${finalOutDir}\n  (whiteboard data: ${path.join(finalOutDir, 'data')})\n  (LAN: copy .env.example to .env, set HOSTNAME=0.0.0.0, run allow-firewall-inbound.bat as admin)\n`,
 );

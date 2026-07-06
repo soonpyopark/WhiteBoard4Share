@@ -1,4 +1,4 @@
-# WhiteBoard4Share
+# Whiteboard4Share
 
 로컬 PC에서 동작하는 화이트보드 앱입니다.  
 필압 펜 타블렛, 이미지·텍스트 삽입, 레이어 순서 조정, 자동 저장, Windows 포터블 exe 배포를 지원합니다.
@@ -58,7 +58,7 @@
 
 블로그에서 배포하는 exe 파일은 **설치 없이** 바로 실행할 수 있습니다.
 
-1. `WhiteBoard4Share.exe` 실행 (또는 `exe/WhiteBoard4Share-*/` 폴더에서 실행)
+1. `Whiteboard4Share.exe` 실행 (또는 `exe/Whiteboard4Share-*/` 폴더에서 실행)
 2. exe와 같은 폴더에 `data/`가 생성되며, 화이트보드가 JSON으로 저장됩니다.
 3. 메뉴 바 없이 전체 화면에 가깝게 동작하며, 외부 링크는 **기본 브라우저**에서 열립니다.
 
@@ -76,8 +76,8 @@
 ### 설치
 
 ```bash
-git clone <저장소-URL>
-cd "WhiteBoard4Share v1.0.0"
+git clone https://github.com/soonpyopark/Whiteboard4Share.git
+cd Whiteboard4Share
 npm install
 ```
 
@@ -109,7 +109,7 @@ npm run start
 npm run build:dist:exe
 ```
 
-빌드 결과: `exe/WhiteBoard4Share-YYMMDD-HHMMSS/` 폴더
+빌드 결과: `exe/Whiteboard4Share-YYMMDD-HHMMSS/` 폴더
 
 ### 기타 스크립트
 

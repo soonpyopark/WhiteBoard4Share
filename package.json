@@ -2,8 +2,8 @@
   "name": "whiteboard4share",
   "private": true,
   "version": "1.0.3",
-  "description": "WhiteBoard4Share",
-  "author": "WhiteBoard4Share",
+  "description": "Whiteboard4Share",
+  "author": "Whiteboard4Share",
   "type": "module",
   "main": "electron-dist/main.cjs",
   "scripts": {
@@ -47,7 +47,7 @@
   },
   "build": {
     "appId": "com.whiteboard4share.app",
-    "productName": "WhiteBoard4Share",
+    "productName": "Whiteboard4Share",
     "directories": {
       "buildResources": "electron"
     },

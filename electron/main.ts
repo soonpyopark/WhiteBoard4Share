@@ -229,7 +229,7 @@ async function handleStopServer(): Promise<void> {
     serverPort = null;
     updateTrayMenu();
   } catch (err) {
-    console.error('[WhiteBoard4Share] stop server failed:', err);
+    console.error('[Whiteboard4Share] stop server failed:', err);
     void dialog.showErrorBox('Stop Server', '서버를 중지하지 못했습니다.');
   }
 }
@@ -251,7 +251,7 @@ async function handleStartServer(): Promise<void> {
       showMainWindow();
     }
   } catch (err) {
-    console.error('[WhiteBoard4Share] start server failed:', err);
+    console.error('[Whiteboard4Share] start server failed:', err);
     void dialog.showErrorBox('Start Server', '서버를 시작하지 못했습니다.');
     updateTrayMenu();
   }
@@ -282,7 +282,7 @@ async function requestQuit(): Promise<void> {
     try {
       await stopServer();
     } catch (err) {
-      console.error('[WhiteBoard4Share] stop server on exit failed:', err);
+      console.error('[Whiteboard4Share] stop server on exit failed:', err);
     }
   }
 
@@ -359,7 +359,7 @@ app.whenReady().then(() => {
   createSplashWindow();
   void createWindow().catch((err) => {
     closeSplashWindow();
-    console.error('[WhiteBoard4Share] startup failed:', err);
+    console.error('[Whiteboard4Share] startup failed:', err);
     void requestQuit();
   });
 });
@@ -378,7 +378,7 @@ app.on('activate', () => {
     createSplashWindow();
     void createWindow().catch((err) => {
       closeSplashWindow();
-      console.error('[WhiteBoard4Share] startup failed:', err);
+      console.error('[Whiteboard4Share] startup failed:', err);
       void requestQuit();
     });
     return;

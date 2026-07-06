@@ -15,13 +15,13 @@ if exist ".env" (
 )
 for /f "tokens=* delims= " %%a in ("%PORT%") do set "PORT=%%a"
 
-set "RULE_PORT=WhiteBoard4Share Inbound TCP %PORT%"
-set "RULE_APP=WhiteBoard4Share Inbound App"
-set "EXE_PATH=%~dp0WhiteBoard4Share.exe"
+set "RULE_PORT=Whiteboard4Share Inbound TCP %PORT%"
+set "RULE_APP=Whiteboard4Share Inbound App"
+set "EXE_PATH=%~dp0Whiteboard4Share.exe"
 
 echo.
 echo ========================================
-echo  WhiteBoard4Share 방화벽 인바운드 허용
+echo  Whiteboard4Share 방화벽 인바운드 허용
 echo ========================================
 echo   TCP 포트 : %PORT%
 echo   프로그램 : %EXE_PATH%
@@ -31,12 +31,12 @@ if exist "%EXE_PATH%" (
   netsh advfirewall firewall delete rule name="%RULE_APP%" >nul 2>&1
   netsh advfirewall firewall add rule name="%RULE_APP%" dir=in action=allow program="%EXE_PATH%" enable=yes profile=any
   if errorlevel 1 (
-    echo [오류] WhiteBoard4Share.exe 프로그램 규칙 추가에 실패했습니다.
+    echo [오류] Whiteboard4Share.exe 프로그램 규칙 추가에 실패했습니다.
     goto ERR
   )
-  echo [완료] WhiteBoard4Share.exe 인바운드 허용
+  echo [완료] Whiteboard4Share.exe 인바운드 허용
 ) else (
-  echo [안내] WhiteBoard4Share.exe가 없어 포트 규칙만 추가합니다.
+  echo [안내] Whiteboard4Share.exe가 없어 포트 규칙만 추가합니다.
 )
 
 netsh advfirewall firewall delete rule name="%RULE_PORT%" >nul 2>&1
