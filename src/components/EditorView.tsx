@@ -829,7 +829,7 @@ export function EditorView({
       <main className="workspace">
         <div className="workspace-canvas-area">
           <DrawingToolsBar
-            key={whiteboardId}
+            key={`${whiteboardId}-tools`}
             tool={tool}
             drawSettings={drawSettings}
             eraserSettings={eraserSettings}
@@ -851,7 +851,7 @@ export function EditorView({
             onRedo={() => void handleRedo()}
           />
           <DrawingCanvas
-          key={whiteboardId}
+          key={`${whiteboardId}-canvas`}
           tool={tool}
           drawSettings={drawSettings}
           eraserSettings={eraserSettings}

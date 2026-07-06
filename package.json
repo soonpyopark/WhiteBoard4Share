@@ -7,7 +7,8 @@
   "type": "module",
   "main": "electron-dist/main.cjs",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -k -n vite,electron -c blue,green \"vite\" \"node scripts/dev-electron.mjs\"",
+    "dev:web": "vite",
     "dev:restart": "node scripts/dev-restart.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
@@ -69,5 +70,8 @@
       "icon": "icon.png",
       "signExecutable": false
     }
+  },
+  "allowScripts": {
+    "electron@36.2.0": true
   }
 }

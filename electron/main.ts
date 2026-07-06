@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron';
 import path from 'path';
 import { APP_CONFIG } from './app-config.ts';
+import { DEFAULT_PORT, parsePort } from '../config/ports.ts';
 import { loadEnvFromAppRoot } from '../config/loadEnv.ts';
 import {
   getActiveServerPort,
@@ -14,6 +15,14 @@ let splashWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let serverPort: number | null = null;
+
+function isElectronDev(): boolean {
+  return !app.isPackaged && process.env.ELECTRON_DEV === '1';
+}
+
+function resolveDevServerUrl(): string {
+  return process.env.VITE_DEV_SERVER_URL ?? `http://127.0.0.1:${parsePort(process.env.PORT, DEFAULT_PORT)}`;
+}
 
 function resolveElectronDir(): string {
   return path.dirname(__filename);
@@ -152,20 +161,21 @@ function closeSplashWindow(): void {
 function updateTrayMenu(): void {
   if (!tray) return;
 
-  const running = isServerRunning();
-  serverPort = getActiveServerPort();
+  const dev = isElectronDev();
+  const running = dev || isServerRunning();
+  serverPort = dev ? parsePort(process.env.PORT, DEFAULT_PORT) : getActiveServerPort();
 
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Stop Server',
-      enabled: running,
+      enabled: running && !dev,
       click: () => {
         void handleStopServer();
       },
     },
     {
       label: 'Start Server',
-      enabled: !running,
+      enabled: !running && !dev,
       click: () => {
         void handleStartServer();
       },
@@ -187,9 +197,11 @@ function updateTrayMenu(): void {
 
   tray.setContextMenu(contextMenu);
   tray.setToolTip(
-    running && serverPort
-      ? `${APP_CONFIG.title} — Server running (:${serverPort})`
-      : `${APP_CONFIG.title} — Server stopped`,
+    dev && serverPort
+      ? `${APP_CONFIG.title} — Dev mode (:${serverPort})`
+      : running && serverPort
+        ? `${APP_CONFIG.title} — Server running (:${serverPort})`
+        : `${APP_CONFIG.title} — Server stopped`,
   );
 }
 
@@ -290,8 +302,14 @@ async function createWindow(): Promise<void> {
 
   loadEnvFromAppRoot(appRoot);
 
-  serverPort = await startServer();
+  if (isElectronDev()) {
+    serverPort = parsePort(process.env.PORT, DEFAULT_PORT);
+  } else {
+    serverPort = await startServer();
+  }
+
   const iconPath = resolveIconPath();
+  const appUrl = isElectronDev() ? resolveDevServerUrl() : `http://127.0.0.1:${serverPort}`;
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -315,9 +333,12 @@ async function createWindow(): Promise<void> {
   mainWindow.once('ready-to-show', () => {
     closeSplashWindow();
     mainWindow?.show();
+    if (isElectronDev()) {
+      mainWindow?.webContents.openDevTools({ mode: 'detach' });
+    }
   });
 
-  await mainWindow.loadURL(`http://127.0.0.1:${serverPort}`);
+  await mainWindow.loadURL(appUrl);
 
   mainWindow.on('close', (event) => {
     if (isQuitting) return;
