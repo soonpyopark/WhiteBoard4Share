@@ -8,6 +8,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number.parseInt(process.env.PORT ?? '3007', 10) || 3007;
 const devUrl = `http://127.0.0.1:${port}`;
 
+execSync('node scripts/prepare-icon.mjs', { cwd: root, stdio: 'inherit' });
 execSync('node scripts/build-electron.mjs', { cwd: root, stdio: 'inherit' });
 
 function resolveElectronPath() {

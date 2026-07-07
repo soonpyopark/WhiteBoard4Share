@@ -335,6 +335,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
             onClick={() => setSplashOpen(true)}
             aria-label={`${APP_CONFIG.title} 정보 보기`}
           >
+            <img className="gallery-app-icon" src="/icon.png" alt="" aria-hidden="true" />
             <span className="gallery-title">
               {APP_CONFIG.title}{' '}
               <span className="gallery-version">v{APP_CONFIG.version}</span>

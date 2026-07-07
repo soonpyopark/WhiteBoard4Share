@@ -1,12 +1,17 @@
 /**
  * Remove outside canvas (white + drop shadow) via edge flood-fill.
  * Keeps the full icon inside the dark blue rounded border; outside = transparent.
- * Output: electron/icon.png (1024), public/icon.png (256), electron/splash-icon.png (256)
+ * Output: electron/icon.png (1024), public/icon.png (256),
+ *         electron/icon.ico, electron/icon.icns (platform installers)
  */
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const png2icons = require('png2icons');
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultSrc = path.join(rootDir, 'electron', 'icon-source.png');
@@ -20,7 +25,6 @@ import sys
 src = sys.argv[1]
 out_main = sys.argv[2]
 out_ui = sys.argv[3]
-out_splash = sys.argv[4]
 
 im = Image.open(src).convert('RGBA')
 w, h = im.size
@@ -293,13 +297,13 @@ main = big.resize((1024, 1024), Image.Resampling.LANCZOS)
 ui = big.resize((256, 256), Image.Resampling.LANCZOS)
 main.save(out_main, 'PNG')
 ui.save(out_ui, 'PNG')
-ui.save(out_splash, 'PNG')
 print(f'icon prepared: {out_main} ({main.size[0]}x{main.size[1]})')
 `;
 
 const electronIcon = path.join(rootDir, 'electron', 'icon.png');
 const publicIcon = path.join(rootDir, 'public', 'icon.png');
-const splashIcon = path.join(rootDir, 'electron', 'splash-icon.png');
+const electronIco = path.join(rootDir, 'electron', 'icon.ico');
+const electronIcns = path.join(rootDir, 'electron', 'icon.icns');
 
 if (!fs.existsSync(srcPath)) {
   console.error(`Source image not found: ${srcPath}`);
@@ -309,10 +313,28 @@ if (!fs.existsSync(srcPath)) {
 fs.mkdirSync(path.dirname(electronIcon), { recursive: true });
 fs.mkdirSync(path.dirname(publicIcon), { recursive: true });
 
-const result = spawnSync('python', ['-c', pyScript, srcPath, electronIcon, publicIcon, splashIcon], {
+const result = spawnSync('python', ['-c', pyScript, srcPath, electronIcon, publicIcon], {
   stdio: 'inherit',
 });
 
 if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
+
+const iconBuffer = fs.readFileSync(electronIcon);
+const ico = png2icons.createICO(iconBuffer, png2icons.BILINEAR, 0, false, true);
+const icns = png2icons.createICNS(iconBuffer, png2icons.BILINEAR, 0);
+
+if (!ico) {
+  console.error('Failed to generate electron/icon.ico');
+  process.exit(1);
+}
+if (!icns) {
+  console.error('Failed to generate electron/icon.icns');
+  process.exit(1);
+}
+
+fs.writeFileSync(electronIco, ico);
+fs.writeFileSync(electronIcns, icns);
+console.log(`icon prepared: ${electronIco}`);
+console.log(`icon prepared: ${electronIcns}`);

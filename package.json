@@ -10,7 +10,8 @@
     "dev": "concurrently -k -n vite,electron -c blue,green \"vite\" \"node scripts/dev-electron.mjs\"",
     "dev:web": "vite",
     "dev:restart": "node scripts/dev-restart.mjs",
-    "build": "tsc -b && vite build",
+    "prepare:icon": "node scripts/prepare-icon.mjs",
+    "build": "npm run prepare:icon && tsc -b && vite build",
     "lint": "oxlint",
     "start": "tsx server/index.ts",
     "preview": "npm run build && npm run start",
@@ -41,6 +42,7 @@
     "electron-builder": "^26.0.12",
     "esbuild": "^0.28.1",
     "oxlint": "^1.69.0",
+    "png2icons": "^2.0.1",
     "tsx": "^4.22.4",
     "typescript": "~6.0.2",
     "vite": "^8.1.0"
@@ -63,11 +65,25 @@
       }
     ],
     "asar": true,
+    "icon": "icon.png",
+    "mac": {
+      "icon": "icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dir"
+      ]
+    },
+    "linux": {
+      "icon": "icon.png",
+      "target": [
+        "dir"
+      ]
+    },
     "win": {
       "target": [
         "dir"
       ],
-      "icon": "icon.png",
+      "icon": "icon.ico",
       "signExecutable": false
     }
   },

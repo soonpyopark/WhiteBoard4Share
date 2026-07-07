@@ -10,6 +10,8 @@ import {
   stopServer,
 } from '../server/startServer.ts';
 
+const APP_ID = 'com.whiteboard4share.app';
+
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -46,10 +48,26 @@ function resolveIconPath(): string {
   return path.join(resolveElectronDir(), 'icon.png');
 }
 
-function resolveTrayIcon(): Electron.NativeImage {
+function resolveAppIcon(): Electron.NativeImage {
   const icon = nativeImage.createFromPath(resolveIconPath());
+  return icon.isEmpty() ? nativeImage.createEmpty() : icon;
+}
+
+function applyAppIcon(): void {
+  const icon = resolveAppIcon();
+  if (icon.isEmpty()) return;
+
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(icon);
+  }
+}
+
+function resolveTrayIcon(): Electron.NativeImage {
+  const icon = resolveAppIcon();
   if (icon.isEmpty()) return icon;
-  return icon.resize({ width: 16, height: 16 });
+
+  const size = process.platform === 'darwin' ? 18 : 16;
+  return icon.resize({ width: size, height: size });
 }
 
 function isLocalAppUrl(url: string, port: number): boolean {
@@ -107,6 +125,7 @@ function showSplashWindow(mode: 'loading' | 'about'): void {
   }
 
   const iconPath = resolveIconPath();
+  const appIcon = resolveAppIcon();
 
   splashWindow = new BrowserWindow({
     width: 400,
@@ -118,7 +137,7 @@ function showSplashWindow(mode: 'loading' | 'about'): void {
     center: true,
     show: false,
     backgroundColor: '#0a1a33',
-    icon: iconPath,
+    icon: appIcon.isEmpty() ? iconPath : appIcon,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -309,6 +328,7 @@ async function createWindow(): Promise<void> {
   }
 
   const iconPath = resolveIconPath();
+  const appIcon = resolveAppIcon();
   const appUrl = isElectronDev() ? resolveDevServerUrl() : `http://127.0.0.1:${serverPort}`;
 
   mainWindow = new BrowserWindow({
@@ -319,7 +339,7 @@ async function createWindow(): Promise<void> {
     title: APP_CONFIG.title,
     autoHideMenuBar: true,
     show: false,
-    icon: iconPath,
+    icon: appIcon.isEmpty() ? iconPath : appIcon,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -355,6 +375,10 @@ async function createWindow(): Promise<void> {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(APP_ID);
+  }
+  applyAppIcon();
   Menu.setApplicationMenu(null);
   createSplashWindow();
   void createWindow().catch((err) => {

@@ -35,6 +35,7 @@
 .gallery-title-btn {
   display: inline-flex;
   align-items: center;
+  gap: 0.5rem;
   border: none;
   background: transparent;
   padding: 0;
@@ -42,6 +43,15 @@
   cursor: pointer;
   border-radius: 6px;
   text-align: left;
+}
+
+.gallery-app-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 6px;
+  pointer-events: none;
 }
 
 .gallery-title-btn:hover .gallery-title,
