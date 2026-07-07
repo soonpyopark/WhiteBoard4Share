@@ -17,7 +17,7 @@ export function SplashOverlay({ open, onClose }: SplashOverlayProps) {
       onClick={onClose}
     >
       <div className="splash-overlay__panel" onClick={onClose}>
-        <img className="splash-overlay__logo" src="/icon.png" alt="" />
+        <img className="splash-overlay__logo" src="/icon-136.png" alt="" />
         <div className="splash-overlay__content">
           <h2 className="splash-overlay__title">
             {APP_CONFIG.title}{' '}

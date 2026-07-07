@@ -111,11 +111,35 @@ npm run build:dist:exe
 
 빌드 결과: `exe/Whiteboard4Share-YYMMDD-HHMMSS/` 폴더
 
+### 컴포넌트 일괄 업데이트
+
+소스·npm 의존성·Electron 자산을 최신으로 맞추고, 필요 시 포터블 exe까지 다시 빌드합니다.
+
+```bash
+update_all.bat
+```
+
+또는 업데이트 + exe 빌드까지 한 번에:
+
+```bash
+npm run build:update_all
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `build` | 업데이트 후 `npm run build:dist:exe` 실행 |
+| `force` | `npm install --force` 및 Electron 바이너리 재확인 |
+| `skip-git` | `git pull` 생략 |
+| `skip-npm` | npm 설치·빌드 생략 |
+
+로그: `data/logs/update-all.log`
+
 ### 기타 스크립트
 
 ```bash
 npm run lint          # oxlint
 npm run electron:dev  # Electron 로컬 실행 (개발용)
+npm run build:update_all  # git + npm 업데이트 + exe 빌드
 ```
 
 ---

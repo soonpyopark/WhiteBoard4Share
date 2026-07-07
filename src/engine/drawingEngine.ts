@@ -442,7 +442,12 @@ export class DrawingEngine {
       this.resetHistory();
     }
     if (options.resetView) {
-      this.resetView();
+      const { width, height } = this.getViewportSize();
+      if (width > 0 && height > 0) {
+        this.recenterView(width, height);
+      } else {
+        this.resetView();
+      }
     }
     await preloadImages(this.images);
     this.invalidateSceneCache();
@@ -664,6 +669,14 @@ export class DrawingEngine {
     this.invalidateSceneCache();
     this.redraw();
     this.notifyZoomChange();
+  }
+
+  private getViewportSize(): { width: number; height: number } {
+    const canvas = this.ctx.canvas;
+    return {
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    };
   }
 
   getViewCenterWorld(screenWidth: number, screenHeight: number): { x: number; y: number } {

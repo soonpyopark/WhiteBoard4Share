@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const outDir = 'electron-dist';
-const staticAssets = ['splash.html', 'icon.png'];
+const staticAssets = ['splash.html', 'icon.png', 'icon.ico', 'icon-256.png', 'icon-32.png', 'splash-icon.png'];
 
 fs.mkdirSync(outDir, { recursive: true });
 

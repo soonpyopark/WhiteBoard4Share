@@ -17,7 +17,9 @@
     "preview": "npm run build && npm run start",
     "build:electron": "node scripts/build-electron.mjs",
     "electron:dev": "npm run build && npm run build:electron && electron .",
-    "build:dist:exe": "node scripts/build-dist-exe.mjs"
+    "build:dist:exe": "node scripts/build-dist-exe.mjs",
+    "build:update_all": "update_all.bat _inner build",
+    "postinstall": "node scripts/postinstall-electron.mjs"
   },
   "dependencies": {
     "concurrently": "^10.0.3",

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron';
+import fs from 'fs';
 import path from 'path';
 import { APP_CONFIG } from './app-config.ts';
 import { DEFAULT_PORT, parsePort } from '../config/ports.ts';
@@ -48,9 +49,32 @@ function resolveIconPath(): string {
   return path.join(resolveElectronDir(), 'icon.png');
 }
 
-function resolveAppIcon(): Electron.NativeImage {
-  const icon = nativeImage.createFromPath(resolveIconPath());
+function resolveSizedIconPath(fileName: string): string {
+  const sizedPath = path.join(resolveElectronDir(), fileName);
+  if (fs.existsSync(sizedPath)) return sizedPath;
+  return resolveIconPath();
+}
+
+function loadNativeIcon(fileName: string): Electron.NativeImage {
+  const icon = nativeImage.createFromPath(resolveSizedIconPath(fileName));
   return icon.isEmpty() ? nativeImage.createEmpty() : icon;
+}
+
+function resolveAppIcon(): Electron.NativeImage {
+  return loadNativeIcon('icon-256.png');
+}
+
+/** Windows title bar + taskbar: use multi-size .ico (Electron recommendation on win32). */
+function resolveWindowIcon(): string | Electron.NativeImage {
+  if (process.platform === 'win32') {
+    const icoPath = path.join(resolveElectronDir(), 'icon.ico');
+    if (fs.existsSync(icoPath)) {
+      return icoPath;
+    }
+  }
+
+  const appIcon = resolveAppIcon();
+  return appIcon.isEmpty() ? resolveIconPath() : appIcon;
 }
 
 function applyAppIcon(): void {
@@ -63,11 +87,7 @@ function applyAppIcon(): void {
 }
 
 function resolveTrayIcon(): Electron.NativeImage {
-  const icon = resolveAppIcon();
-  if (icon.isEmpty()) return icon;
-
-  const size = process.platform === 'darwin' ? 18 : 16;
-  return icon.resize({ width: size, height: size });
+  return loadNativeIcon('icon-32.png');
 }
 
 function isLocalAppUrl(url: string, port: number): boolean {
@@ -124,7 +144,6 @@ function showSplashWindow(mode: 'loading' | 'about'): void {
     return;
   }
 
-  const iconPath = resolveIconPath();
   const appIcon = resolveAppIcon();
 
   splashWindow = new BrowserWindow({
@@ -137,7 +156,7 @@ function showSplashWindow(mode: 'loading' | 'about'): void {
     center: true,
     show: false,
     backgroundColor: '#0a1a33',
-    icon: appIcon.isEmpty() ? iconPath : appIcon,
+    icon: appIcon.isEmpty() ? resolveSizedIconPath('splash-icon.png') : appIcon,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -327,8 +346,6 @@ async function createWindow(): Promise<void> {
     serverPort = await startServer();
   }
 
-  const iconPath = resolveIconPath();
-  const appIcon = resolveAppIcon();
   const appUrl = isElectronDev() ? resolveDevServerUrl() : `http://127.0.0.1:${serverPort}`;
 
   mainWindow = new BrowserWindow({
@@ -339,7 +356,7 @@ async function createWindow(): Promise<void> {
     title: APP_CONFIG.title,
     autoHideMenuBar: true,
     show: false,
-    icon: appIcon.isEmpty() ? iconPath : appIcon,
+    icon: resolveWindowIcon(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
