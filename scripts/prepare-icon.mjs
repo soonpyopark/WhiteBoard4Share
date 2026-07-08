@@ -307,6 +307,17 @@ def to_square(icon):
 def resize_sharp(icon, target):
     return icon.resize((target, target), Image.Resampling.LANCZOS)
 
+def apply_rounded_corners(icon, radius_ratio=0.10):
+    """Clip icon to slightly rounded square corners (transparent outside)."""
+    ww, wh = icon.size
+    radius = max(2, int(min(ww, wh) * radius_ratio))
+    mask = Image.new('L', (ww, wh), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle((0, 0, ww - 1, wh - 1), radius=radius, fill=255)
+    r, g, b, a = icon.split()
+    a = ImageChops.multiply(a, mask)
+    return Image.merge('RGBA', (r, g, b, a))
+
 def process_legacy(image):
     work = remove_outside_canvas(image)
     bbox = work.getbbox()
@@ -316,10 +327,10 @@ def process_legacy(image):
     square = to_square(icon)
     big = square.resize((square.size[0] * 2, square.size[1] * 2), Image.Resampling.LANCZOS)
     big = refine_outer_edge(big)
-    return big
+    return apply_rounded_corners(big, 0.10)
 
 def process_simple(image):
-    return to_square(image)
+    return apply_rounded_corners(to_square(image), 0.10)
 
 if mode == 'legacy':
     base = process_legacy(im)

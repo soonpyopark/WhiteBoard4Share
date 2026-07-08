@@ -107,7 +107,7 @@ export function EditorView({
 }: EditorViewProps) {
   const isEmbed = Boolean(embedMode);
   const showBackButton = !shareLinkMode && !shareToken && !isEmbed;
-  const [tool, setTool] = useState<Tool>('pencil');
+  const [tool, setTool] = useState<Tool>('pen');
   const [drawSettingsByTool, setDrawSettingsByTool] = useState<
     Record<DrawSettingsTool, DrawToolSettings>
   >(() => ({ ...DEFAULT_DRAW_TOOL_SETTINGS }));

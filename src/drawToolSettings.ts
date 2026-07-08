@@ -21,7 +21,7 @@ export const PENCIL_PEN_SIZE_MIN = 0.5;
 export const PENCIL_PEN_SIZE_MAX = 6;
 export const PENCIL_PEN_SIZE_STEP = 0.5;
 export const PENCIL_DEFAULT_SIZE = 1.5;
-export const PEN_DEFAULT_SIZE = 2;
+export const PEN_DEFAULT_SIZE = 1.5;
 
 export const OPACITY_STEP = 10;
 
