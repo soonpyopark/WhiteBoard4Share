@@ -163,6 +163,12 @@ export class DrawingEngine {
   private sceneCacheRenderedTexts = 0;
   private sceneCacheRenderedTables = 0;
   private sceneCacheViewKey = '';
+  private sceneCacheBuildRafId: number | null = null;
+  private sceneCacheBuildSortedIndex = 0;
+  private sceneCacheSortedObjects: SceneObject[] = [];
+  private sceneCacheBuilding = false;
+  private static readonly SCENE_CACHE_CHUNK_OBJECTS = 40;
+  private static readonly SCENE_CACHE_INCREMENTAL_THRESHOLD = 20;
   private dragBaseCache: HTMLCanvasElement | null = null;
   private dragBaseCacheCtx: CanvasRenderingContext2D | null = null;
   private panBaseCache: HTMLCanvasElement | null = null;
@@ -716,6 +722,10 @@ export class DrawingEngine {
 
   isPanning(): boolean {
     return this.panDrag !== null;
+  }
+
+  isSceneCacheBuilding(): boolean {
+    return this.sceneCacheBuilding;
   }
 
   resize(width: number, height: number, dpr: number): void {
@@ -1825,12 +1835,175 @@ export class DrawingEngine {
   }
 
   private invalidateSceneCache(): void {
+    this.cancelSceneCacheBuild();
     this.sceneCacheValid = false;
     this.sceneCacheRenderedPaths = 0;
     this.sceneCacheRenderedImages = 0;
     this.sceneCacheRenderedTexts = 0;
     this.sceneCacheRenderedTables = 0;
     this.sceneCacheViewKey = '';
+  }
+
+  private cancelSceneCacheBuild(): void {
+    if (this.sceneCacheBuildRafId !== null) {
+      cancelAnimationFrame(this.sceneCacheBuildRafId);
+      this.sceneCacheBuildRafId = null;
+    }
+    this.sceneCacheBuilding = false;
+    this.sceneCacheBuildSortedIndex = 0;
+    this.sceneCacheSortedObjects = [];
+  }
+
+  private shouldUseIncrementalSceneCacheBuild(): boolean {
+    return (
+      this.paths.length +
+        this.images.length +
+        this.texts.length +
+        this.tables.length >=
+      DrawingEngine.SCENE_CACHE_INCREMENTAL_THRESHOLD
+    );
+  }
+
+  private beginSceneCacheCanvas(): CanvasRenderingContext2D {
+    const cacheCtx = this.ensureSceneCacheCanvas();
+    const canvas = this.ctx.canvas;
+
+    cacheCtx.save();
+    cacheCtx.setTransform(1, 0, 0, 1, 0, 0);
+    cacheCtx.fillStyle = '#ffffff';
+    cacheCtx.fillRect(0, 0, canvas.width, canvas.height);
+    cacheCtx.restore();
+    cacheCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+
+    return cacheCtx;
+  }
+
+  private renderSceneObject(ctx: CanvasRenderingContext2D, obj: SceneObject): void {
+    if (this.hiddenSceneObjectIds.has(obj.id)) return;
+
+    if ('points' in obj) {
+      renderPath(ctx, obj);
+      return;
+    }
+    if (isTextObject(obj)) {
+      renderText(ctx, obj);
+      return;
+    }
+    if (isTableObject(obj)) {
+      renderTable(ctx, obj);
+      return;
+    }
+
+    const htmlImg = getCachedImage(obj.id);
+    if (htmlImg) renderImage(ctx, obj, htmlImg);
+  }
+
+  private renderSortedObjectsToCache(
+    cacheCtx: CanvasRenderingContext2D,
+    objects: readonly SceneObject[],
+    start: number,
+    end: number,
+    excludeIds?: ReadonlySet<string>,
+  ): void {
+    if (start >= end) return;
+
+    cacheCtx.save();
+    cacheCtx.translate(this.viewOffsetX, this.viewOffsetY);
+    cacheCtx.scale(this.viewScale, this.viewScale);
+
+    for (let i = start; i < end; i++) {
+      const obj = objects[i];
+      if (excludeIds?.has(obj.id)) continue;
+      this.renderSceneObject(cacheCtx, obj);
+    }
+
+    cacheCtx.restore();
+  }
+
+  private markSceneCacheComplete(): void {
+    this.sceneCacheValid = true;
+    this.sceneCacheRenderedPaths = this.paths.length;
+    this.sceneCacheRenderedImages = this.images.length;
+    this.sceneCacheRenderedTexts = this.texts.length;
+    this.sceneCacheRenderedTables = this.tables.length;
+    this.sceneCacheViewKey = this.getSceneCacheViewKey();
+  }
+
+  private startIncrementalSceneCacheBuild(): void {
+    this.cancelSceneCacheBuild();
+
+    const cacheCtx = this.beginSceneCacheCanvas();
+    const viewKey = this.getSceneCacheViewKey();
+    this.sceneCacheSortedObjects = getSceneObjectsSorted(
+      this.paths,
+      this.images,
+      this.texts,
+      this.tables,
+    );
+    this.sceneCacheBuilding = true;
+    this.sceneCacheBuildSortedIndex = 0;
+    this.sceneCacheViewKey = viewKey;
+
+    const total = this.sceneCacheSortedObjects.length;
+    const firstEnd = Math.min(DrawingEngine.SCENE_CACHE_CHUNK_OBJECTS, total);
+    this.renderSortedObjectsToCache(cacheCtx, this.sceneCacheSortedObjects, 0, firstEnd);
+    this.sceneCacheBuildSortedIndex = firstEnd;
+    this.redraw();
+
+    if (firstEnd >= total) {
+      this.completeIncrementalSceneCacheBuild();
+      return;
+    }
+
+    const tick = (): void => {
+      if (!this.sceneCacheBuilding || this.getSceneCacheViewKey() !== viewKey) {
+        this.cancelSceneCacheBuild();
+        this.syncSceneCache();
+        this.redraw();
+        return;
+      }
+
+      const nextEnd = Math.min(
+        this.sceneCacheBuildSortedIndex + DrawingEngine.SCENE_CACHE_CHUNK_OBJECTS,
+        this.sceneCacheSortedObjects.length,
+      );
+      this.renderSortedObjectsToCache(
+        cacheCtx,
+        this.sceneCacheSortedObjects,
+        this.sceneCacheBuildSortedIndex,
+        nextEnd,
+      );
+      this.sceneCacheBuildSortedIndex = nextEnd;
+      this.redraw();
+
+      if (nextEnd >= this.sceneCacheSortedObjects.length) {
+        this.completeIncrementalSceneCacheBuild();
+        return;
+      }
+
+      this.sceneCacheBuildRafId = requestAnimationFrame(tick);
+    };
+
+    this.sceneCacheBuildRafId = requestAnimationFrame(tick);
+  }
+
+  private completeIncrementalSceneCacheBuild(): void {
+    if (this.sceneCacheBuildRafId !== null) {
+      cancelAnimationFrame(this.sceneCacheBuildRafId);
+      this.sceneCacheBuildRafId = null;
+    }
+    this.sceneCacheBuilding = false;
+    this.sceneCacheBuildSortedIndex = 0;
+    this.sceneCacheSortedObjects = [];
+    this.markSceneCacheComplete();
+  }
+
+  private scheduleSceneCacheRebuild(): void {
+    if (this.shouldUseIncrementalSceneCacheBuild()) {
+      this.startIncrementalSceneCacheBuild();
+      return;
+    }
+    this.rebuildSceneCache();
   }
 
   private getSceneCacheViewKey(): string {
@@ -1863,17 +2036,7 @@ export class DrawingEngine {
     objects: readonly SceneObject[],
   ): void {
     for (const obj of objects) {
-      if (this.hiddenSceneObjectIds.has(obj.id)) continue;
-      if ('points' in obj) {
-        renderPath(ctx, obj);
-      } else if (isTextObject(obj)) {
-        renderText(ctx, obj);
-      } else if (isTableObject(obj)) {
-        renderTable(ctx, obj);
-      } else {
-        const htmlImg = getCachedImage(obj.id);
-        if (htmlImg) renderImage(ctx, obj, htmlImg);
-      }
+      this.renderSceneObject(ctx, obj);
     }
   }
 
@@ -2002,15 +2165,7 @@ export class DrawingEngine {
   }
 
   private rebuildSceneCache(): void {
-    const cacheCtx = this.ensureSceneCacheCanvas();
-    const canvas = this.ctx.canvas;
-
-    cacheCtx.save();
-    cacheCtx.setTransform(1, 0, 0, 1, 0, 0);
-    cacheCtx.fillStyle = '#ffffff';
-    cacheCtx.fillRect(0, 0, canvas.width, canvas.height);
-    cacheCtx.restore();
-    cacheCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const cacheCtx = this.beginSceneCacheCanvas();
 
     this.renderSceneObjectsToCache(cacheCtx, {
       pathStart: 0,
@@ -2019,19 +2174,16 @@ export class DrawingEngine {
       tableStart: 0,
     });
 
-    this.sceneCacheValid = true;
-    this.sceneCacheRenderedPaths = this.paths.length;
-    this.sceneCacheRenderedImages = this.images.length;
-    this.sceneCacheRenderedTexts = this.texts.length;
-    this.sceneCacheRenderedTables = this.tables.length;
-    this.sceneCacheViewKey = this.getSceneCacheViewKey();
+    this.markSceneCacheComplete();
   }
 
   private syncSceneCache(): void {
+    if (this.sceneCacheBuilding) return;
+
     const viewKey = this.getSceneCacheViewKey();
 
     if (!this.sceneCacheValid || this.sceneCacheViewKey !== viewKey) {
-      this.rebuildSceneCache();
+      this.scheduleSceneCacheRebuild();
       return;
     }
 
@@ -2054,7 +2206,7 @@ export class DrawingEngine {
       this.sceneCacheRenderedTexts > this.texts.length ||
       this.sceneCacheRenderedTables > this.tables.length
     ) {
-      this.rebuildSceneCache();
+      this.scheduleSceneCacheRebuild();
       return;
     }
 
