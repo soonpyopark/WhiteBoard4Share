@@ -1,9 +1,10 @@
 {
   "name": "whiteboard4share",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Whiteboard4Share",
-  "author": "Whiteboard4Share",
+  "author": "청년안민규",
+  "license": "MIT",
   "type": "module",
   "main": "electron-dist/main.cjs",
   "scripts": {
