@@ -391,39 +391,57 @@ async function createWindow(): Promise<void> {
   updateTrayMenu();
 }
 
-app.whenReady().then(() => {
-  if (process.platform === 'win32') {
-    app.setAppUserModelId(APP_ID);
-  }
-  applyAppIcon();
-  Menu.setApplicationMenu(null);
-  createSplashWindow();
-  void createWindow().catch((err) => {
-    closeSplashWindow();
-    console.error('[Whiteboard4Share] startup failed:', err);
-    void requestQuit();
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.whenReady().then(() => {
+    dialog.showMessageBoxSync({
+      type: 'info',
+      title: APP_CONFIG.title,
+      message: '이미 프로그램이 실행 중입니다.',
+      buttons: ['확인'],
+    });
+    app.quit();
   });
-});
+} else {
+  app.on('second-instance', () => {
+    showMainWindow();
+  });
 
-app.on('before-quit', () => {
-  isQuitting = true;
-  closeSplashWindow();
-});
-
-app.on('window-all-closed', () => {
-  if (isQuitting) return;
-});
-
-app.on('activate', () => {
-  if (mainWindow === null) {
+  app.whenReady().then(() => {
+    if (process.platform === 'win32') {
+      app.setAppUserModelId(APP_ID);
+    }
+    applyAppIcon();
+    Menu.setApplicationMenu(null);
     createSplashWindow();
     void createWindow().catch((err) => {
       closeSplashWindow();
       console.error('[Whiteboard4Share] startup failed:', err);
       void requestQuit();
     });
-    return;
-  }
+  });
 
-  showMainWindow();
-});
+  app.on('before-quit', () => {
+    isQuitting = true;
+    closeSplashWindow();
+  });
+
+  app.on('window-all-closed', () => {
+    if (isQuitting) return;
+  });
+
+  app.on('activate', () => {
+    if (mainWindow === null) {
+      createSplashWindow();
+      void createWindow().catch((err) => {
+        closeSplashWindow();
+        console.error('[Whiteboard4Share] startup failed:', err);
+        void requestQuit();
+      });
+      return;
+    }
+
+    showMainWindow();
+  });
+}

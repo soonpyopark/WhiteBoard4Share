@@ -71,8 +71,8 @@ export function verifySessionToken(token: string | undefined): SessionPayload | 
 
 function getSuperAdminCredentials(): { username: string; password: string } {
   return {
-    username: process.env.ADMIN_USERNAME?.trim() || 'admin.super',
-    password: process.env.ADMIN_PASSWORD?.trim() || 'admin.super!!',
+    username: process.env.ADMIN_USERNAME?.trim() || 'admin',
+    password: process.env.ADMIN_PASSWORD?.trim() || 'admin1234',
   };
 }
 
