@@ -1,5 +1,8 @@
 import { apiRequest } from './client.ts';
 import type { AuthSource, UserRole } from '../../shared/auth.ts';
+import type { FolderInfo } from '../../shared/folders.ts';
+
+export type { FolderInfo };
 
 export interface AuthSession {
   authenticated: boolean;
@@ -21,8 +24,52 @@ export interface AuthSessionResponse extends AuthSession {
   ok?: boolean;
 }
 
-export function fetchDepartments(): Promise<{ departments: string[] }> {
-  return apiRequest<{ departments: string[] }>('/departments');
+export function fetchDepartments(): Promise<{ departments: string[]; folders: FolderInfo[] }> {
+  return apiRequest<{ departments: string[]; folders: FolderInfo[] }>('/departments');
+}
+
+export function fetchFolders(): Promise<{ folders: FolderInfo[] }> {
+  return apiRequest<{ folders: FolderInfo[] }>('/folders');
+}
+
+export function createFolderApi(name: string): Promise<{ folder: FolderInfo; folders: FolderInfo[] }> {
+  return apiRequest('/folders', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function renameFolderApi(
+  id: string,
+  name: string,
+): Promise<{
+  folder: FolderInfo;
+  folders: FolderInfo[];
+  requiresRestart: boolean;
+  fromId: string;
+  toId: string;
+}> {
+  return apiRequest(`/folders/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteFolderApi(
+  id: string,
+  options?: { force?: boolean },
+): Promise<{ id: string; folders: FolderInfo[] }> {
+  const force = options?.force ? '?force=1' : '';
+  return apiRequest(`/folders/${encodeURIComponent(id)}${force}`, {
+    method: 'DELETE',
+  });
+}
+
+export function reorderFoldersApi(ids: string[]): Promise<{ folders: FolderInfo[] }> {
+  return apiRequest('/folders/order', {
+    method: 'PUT',
+    body: JSON.stringify({ ids }),
+  });
 }
 
 export function fetchAuthSession(): Promise<AuthSession> {

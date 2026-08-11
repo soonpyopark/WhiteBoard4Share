@@ -7,6 +7,12 @@ import {
   type UserRole,
 } from '../shared/auth.ts';
 import { isValidDeptCode } from './dept.ts';
+import {
+  findMemberByUsername,
+  hashPassword,
+  updateMemberPasswordHash,
+  verifyPassword,
+} from './membersService.ts';
 
 loadEnvFiles();
 
@@ -87,13 +93,40 @@ function getUserPassword(): string {
   return process.env.USER_PASSWORD?.trim() || 'user!!';
 }
 
-export function authenticateUser(
+export async function authenticateUser(
   username: string,
   password: string,
   byDept: string,
-): AuthenticatedUser | null {
+): Promise<AuthenticatedUser | null> {
   const normalizedUsername = username.trim();
   const normalizedPassword = password;
+
+  const member = await findMemberByUsername(normalizedUsername);
+  if (member) {
+    if (member.disabled) return null;
+    if (!verifyPassword(normalizedPassword, member.passwordHash)) return null;
+
+    // Upgrade legacy plain password storage
+    if (member.passwordHash && !member.passwordHash.includes(':')) {
+      void updateMemberPasswordHash(member.id, hashPassword(normalizedPassword));
+    }
+
+    if (member.role === 'dept') {
+      const adminDept = member.adminDept?.trim() || byDept;
+      if (member.adminDept && member.adminDept !== byDept) return null;
+      return {
+        username: member.username,
+        role: 'dept',
+        adminDept,
+      };
+    }
+
+    return {
+      username: member.username,
+      role: member.role,
+      ...(member.adminDept ? { adminDept: member.adminDept } : {}),
+    };
+  }
 
   const superAdmin = getSuperAdminCredentials();
   if (

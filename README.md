@@ -6,7 +6,7 @@
 - **제작**: 청년안민규
 - **블로그**: [https://note4all.tistory.com](https://note4all.tistory.com)
 - **저장소**: [https://github.com/soonpyopark/WhiteBoard4Share](https://github.com/soonpyopark/WhiteBoard4Share)
-- **라이선스**: [MIT License](./LICENSE)
+- **라이선스**: [GNU Affero General Public License v3.0](./LICENSE) (`AGPL-3.0-only`)
 
 ---
 
@@ -14,7 +14,8 @@
 
 ### 갤러리 · 권한
 - 새 화이트보드 생성, 썸네일 미리보기, 이름 변경 / 삭제
-- **총괄관리자 / 부서관리자 / 일반 사용자** 역할
+- **총괄관리자 / 폴더관리자 / 일반 사용자** 역할
+- 폴더(테넌트) 표시 이름 · 생성/이름변경/삭제 (총괄·폴더관리자 권한)
 - 비공개·열람 제한 등 공유 가시성 설정
 - 공유 링크로 화이트보드 열기
 - `.wb4s` 파일로 가져오기 / 내보내기
@@ -45,6 +46,7 @@
 - 설치 없이 USB 폴더로 배포·실행
 - 창을 닫으면 **트레이**로 최소화 (완전 종료는 트레이 메뉴 Exit)
 - **단일 인스턴스** — 이미 실행 중이면 안내 후 재실행하지 않음
+- 갤러리 도움말(`?`)에서 **GitHub Releases 업데이트 확인**
 - LAN 공개: `.env`에서 `HOSTNAME=0.0.0.0` + `allow-firewall-inbound.bat`(관리자)
 
 ---
@@ -77,8 +79,8 @@
 | 역할 | 아이디 | 비밀번호 |
 |------|--------|----------|
 | 총괄관리자 | `admin` | `admin1234` |
-| 부서관리자 | `admin.{부서코드}` | `admin.{부서코드}!!` |
-| 일반 사용자 | (이름+부서로 참여) | 공용 `user!!` (레거시·관리자 로그인용) |
+| 폴더관리자 | `admin.{폴더ID}` | `admin.{폴더ID}!!` |
+| 일반 사용자 | (이름+폴더로 참여) | 공용 `user!!` (레거시·관리자 로그인용) |
 
 Keycloak SSO는 `.env.example`의 `KEYCLOAK_*` 설정을 참고하세요.
 
@@ -116,12 +118,15 @@ npm run dev
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | 총괄관리자 계정 |
 | `VITE_HOME_URL` | (선택) 갤러리 «홈» 버튼 URL |
 
-### 프로덕션 실행 (브라우저)
+### 프로덕션 실행 (Electron)
 
 ```bash
 npm run build
 npm run start
 ```
+
+`npm run start` / `npm run restart`는 Electron 창을 띄우고, 앱 안에서 서버(기본 `3007`)를 켭니다.  
+브라우저만 쓰려면 `npm run start:web`을 사용하세요.
 
 ### Windows 포터블 exe 빌드
 
@@ -129,8 +134,13 @@ npm run start
 npm run build:dist:exe
 ```
 
-빌드 결과: `exe/Whiteboard4Share-{version}-{YYMMDD-HHMMSS}/` 폴더  
-예: `exe/Whiteboard4Share-1.0.5-260712-203520/`
+빌드 결과:
+- 폴더: `exe/Whiteboard4Share-{version}-{YYMMDD-HHMMSS}/`
+- zip: `exe/Whiteboard4Share-{version}-{YYMMDD-HHMMSS}_portable.zip` (PC의 7-Zip 사용)
+
+예: `exe/Whiteboard4Share-1.0.5-260712-220141_portable.zip`
+
+> 7-Zip이 필요합니다. 기본 경로 `C:\Program Files\7-Zip\7z.exe` 또는 환경변수 `SEVEN_ZIP`로 지정하세요.
 
 ### 컴포넌트 일괄 업데이트
 
@@ -188,10 +198,13 @@ npm run build:update_all
 
 ## 라이선스
 
-이 프로젝트는 [MIT License](./LICENSE) 하에 배포됩니다.
+이 프로젝트는 [GNU Affero General Public License v3.0](./LICENSE) (`AGPL-3.0-only`) 하에 배포됩니다.
 
-- 자유롭게 사용·수정·재배포할 수 있습니다.
-- 배포 시 **저작권 표시와 MIT License 전문**을 포함해 주세요.
+- 사용·수정·재배포가 가능하지만, **파생 저작물도 동일한 AGPL-3.0**으로 공개해야 합니다.
+- 수정한 버전을 **네트워크 서비스로 제공하는 경우**에도, 해당 수정본의 **전체 소스 코드**를 이용자에게 제공해야 합니다.
+- 배포 시 **저작권 표시와 LICENSE 전문**을 포함해 주세요.
+
+Copyright (c) 2025-2026 청년안민규 — [https://note4all.tistory.com](https://note4all.tistory.com)
 
 ---
 

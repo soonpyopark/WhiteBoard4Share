@@ -150,3 +150,20 @@ export async function lookupShareLink(token: string): Promise<ShareLinkRecord | 
   await writeIndex(index);
   return fromDocument;
 }
+
+export async function remapShareLinkDept(fromDept: string, toDept: string): Promise<number> {
+  const from = fromDept.trim();
+  const to = toDept.trim();
+  if (!from || !to || from === to) return 0;
+
+  const index = await readIndex();
+  let changed = 0;
+  for (const record of Object.values(index)) {
+    if (record.byDept === from) {
+      record.byDept = to;
+      changed += 1;
+    }
+  }
+  if (changed > 0) await writeIndex(index);
+  return changed;
+}

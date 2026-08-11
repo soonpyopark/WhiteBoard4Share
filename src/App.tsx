@@ -4,6 +4,7 @@ import { MadeByCredit } from './components/MadeByCredit';
 import { AlertDialog } from './components/AlertDialog';
 import { DeptSessionProvider, useDeptSession } from './context/DeptSessionContext';
 import { fetchShareLinkInfo } from './api/share.ts';
+import { loadAndApplyAccentColor } from './lib/themeAccent.ts';
 import { parseShareTokenFromHash } from './utils/shareLink.ts';
 import './App.css';
 import './Gallery.css';
@@ -19,7 +20,7 @@ type View =
 const SSO_ERROR_MESSAGES: Record<string, string> = {
   invalid_state: 'SSO 인증 상태가 올바르지 않습니다. 다시 시도하세요.',
   no_portal_role: '관리자 역할이 없습니다. Keycloak 역할 설정을 확인하세요.',
-  unknown_dept: '부서 정보를 확인할 수 없습니다.',
+  unknown_dept: '폴더 정보를 확인할 수 없습니다.',
   token_exchange_failed: 'SSO 토큰 교환에 실패했습니다.',
 };
 
@@ -34,6 +35,10 @@ function AppContent() {
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
   const { selectedDept, authenticated, loading: sessionLoading, switchDept } = useDeptSession();
   const shareHandledRef = useRef(false);
+
+  useEffect(() => {
+    void loadAndApplyAccentColor();
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

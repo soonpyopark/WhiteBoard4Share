@@ -16,21 +16,28 @@ import {
   logout as logoutRequest,
   switchDepartment,
   type AuthSession,
+  type FolderInfo,
 } from '../api/auth.ts';
 import { setApiByDept } from '../api/client.ts';
 import { getOrCreateLocalUserName, saveLocalUserName } from '../lib/collab/presence-user.ts';
 import type { UserRole } from '../../shared/auth.ts';
+import { defaultFolderName } from '../../shared/folders.ts';
 
 interface DeptSessionContextValue {
+  folders: FolderInfo[];
+  /** Folder ids (legacy field name kept for call sites). */
   departments: string[];
   selectedDept: string;
   setSelectedDept: (dept: string) => void;
+  setFolders: (folders: FolderInfo[]) => void;
+  refreshFolders: () => Promise<FolderInfo[]>;
   authenticated: boolean;
   username: string;
   displayName: string;
   setDisplayName: (name: string) => void;
   commitDisplayName: () => void;
   role: UserRole | null;
+  adminDept: string | null;
   canCreateWhiteboard: boolean;
   keycloakEnabled: boolean;
   allowLocalLogin: boolean;
@@ -54,6 +61,7 @@ function applyAuthSession(
     setUsername: (v: string) => void;
     setDisplayName: (v: string) => void;
     setRole: (v: UserRole | null) => void;
+    setAdminDept: (v: string | null) => void;
     setCanCreateWhiteboard: (v: boolean) => void;
     setKeycloakEnabled: (v: boolean) => void;
     setAllowLocalLogin: (v: boolean) => void;
@@ -75,11 +83,13 @@ function applyAuthSession(
       setters.setDisplayName(session.displayName.trim());
     }
     setters.setRole(session.role ?? 'user');
+    setters.setAdminDept(session.adminDept ?? null);
     setters.setCanCreateWhiteboard(session.canCreateWhiteboard ?? false);
   } else {
     setApiByDept(null);
     setters.setUsername('');
     setters.setRole(null);
+    setters.setAdminDept(null);
     setters.setCanCreateWhiteboard(false);
   }
 }
@@ -88,13 +98,22 @@ function isAdminRole(role: UserRole | null | undefined): boolean {
   return role === 'super' || role === 'dept';
 }
 
+function coerceFolders(
+  folders: FolderInfo[] | undefined,
+  departments: string[],
+): FolderInfo[] {
+  if (folders?.length) return folders;
+  return departments.map((id) => ({ id, name: defaultFolderName(id) }));
+}
+
 export function DeptSessionProvider({ children }: { children: ReactNode }) {
-  const [departments, setDepartments] = useState<string[]>([]);
+  const [folders, setFoldersState] = useState<FolderInfo[]>([]);
   const [selectedDept, setSelectedDeptState] = useState('0000001');
   const [authenticated, setAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState(() => getOrCreateLocalUserName());
   const [role, setRole] = useState<UserRole | null>(null);
+  const [adminDept, setAdminDept] = useState<string | null>(null);
   const [canCreateWhiteboard, setCanCreateWhiteboard] = useState(false);
   const [keycloakEnabled, setKeycloakEnabled] = useState(false);
   const [allowLocalLogin, setAllowLocalLogin] = useState(true);
@@ -107,6 +126,8 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
   displayNameRef.current = displayName;
   roleRef.current = role;
 
+  const departments = useMemo(() => folders.map((folder) => folder.id), [folders]);
+
   const applySession = useCallback((session: AuthSession) => {
     applyAuthSession(session, {
       setAuthenticated,
@@ -114,6 +135,7 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
       setUsername,
       setDisplayName,
       setRole,
+      setAdminDept,
       setCanCreateWhiteboard,
       setKeycloakEnabled,
       setAllowLocalLogin,
@@ -121,6 +143,17 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
       setHomeTarget,
     });
     roleRef.current = session.authenticated ? (session.role ?? 'user') : null;
+  }, []);
+
+  const setFolders = useCallback((next: FolderInfo[]) => {
+    setFoldersState(next);
+  }, []);
+
+  const refreshFolders = useCallback(async () => {
+    const result = await fetchDepartments();
+    const next = coerceFolders(result.folders, result.departments);
+    setFoldersState(next);
+    return next;
   }, []);
 
   const joinAsUser = useCallback(
@@ -150,14 +183,16 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        const [{ departments: deptList }, session] = await Promise.all([
+        const [deptResult, session] = await Promise.all([
           fetchDepartments(),
           fetchAuthSession(),
         ]);
         if (cancelled) return;
 
-        setDepartments(deptList);
-        const deptForJoin = deptList.includes(selectedDept) ? selectedDept : deptList[0] ?? '';
+        const folderList = coerceFolders(deptResult.folders, deptResult.departments);
+        setFoldersState(folderList);
+        const ids = folderList.map((folder) => folder.id);
+        const deptForJoin = ids.includes(selectedDept) ? selectedDept : ids[0] ?? '';
         if (deptForJoin) {
           setSelectedDeptState(deptForJoin);
         }
@@ -242,21 +277,26 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
     setAuthenticated(false);
     setUsername('');
     setRole(null);
+    setAdminDept(null);
     setCanCreateWhiteboard(false);
     await joinAsUser(selectedDept, displayNameRef.current);
   }, [joinAsUser, keycloakEnabled, selectedDept]);
 
   const value = useMemo(
     () => ({
+      folders,
       departments,
       selectedDept,
       setSelectedDept,
+      setFolders,
+      refreshFolders,
       authenticated,
       username,
       displayName,
       setDisplayName: setDisplayNameValue,
       commitDisplayName,
       role,
+      adminDept,
       canCreateWhiteboard,
       keycloakEnabled,
       allowLocalLogin,
@@ -270,15 +310,19 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
       loading,
     }),
     [
+      folders,
       departments,
       selectedDept,
       setSelectedDept,
+      setFolders,
+      refreshFolders,
       authenticated,
       username,
       displayName,
       setDisplayNameValue,
       commitDisplayName,
       role,
+      adminDept,
       canCreateWhiteboard,
       keycloakEnabled,
       allowLocalLogin,
@@ -314,15 +358,19 @@ export function EmbedDeptSessionProvider({
 }) {
   const value = useMemo<DeptSessionContextValue>(
     () => ({
+      folders: [{ id: 'embed', name: 'embed' }],
       departments: ['embed'],
       selectedDept: 'embed',
       setSelectedDept: () => {},
+      setFolders: () => {},
+      refreshFolders: async () => [{ id: 'embed', name: 'embed' }],
       authenticated: true,
       username: userName,
       displayName: userName,
       setDisplayName: () => {},
       commitDisplayName: () => {},
       role: 'user',
+      adminDept: null,
       canCreateWhiteboard: false,
       keycloakEnabled: false,
       allowLocalLogin: false,

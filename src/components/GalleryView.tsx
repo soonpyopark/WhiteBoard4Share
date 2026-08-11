@@ -4,6 +4,7 @@ import {
   createShareLink,
   createWhiteboard,
   deleteWhiteboard,
+  fetchWhiteboard,
   fetchWhiteboards,
   renameWhiteboard,
   reorderWhiteboards,
@@ -19,7 +20,7 @@ import { WhiteboardCard } from './WhiteboardCard';
 import { useDeptSession } from '../context/DeptSessionContext';
 import { useGalleryCollab } from '../hooks/useGalleryCollab';
 import { documentToSummary, mergeGalleryBoardRemote } from '../lib/collab/gallery-sync';
-import { parseWhiteboardFile } from '../lib/whiteboard/whiteboardFile';
+import { downloadWhiteboardFile, parseWhiteboardFile } from '../lib/whiteboard/whiteboardFile';
 import { WHITEBOARD_FILE_EXTENSION } from '../../shared/whiteboard-file';
 import { canViewWhiteboardInGallery } from '../../shared/auth';
 import { APP_CONFIG } from '../appConfig';
@@ -268,6 +269,22 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     }
   };
 
+  const handleExport = async (id: string) => {
+    try {
+      const doc = await fetchWhiteboard(id);
+      downloadWhiteboardFile({
+        title: doc.title,
+        paths: doc.paths,
+        images: doc.images,
+        texts: doc.texts,
+        tables: doc.tables,
+        thumbnail: doc.thumbnail,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '내보내기에 실패했습니다');
+    }
+  };
+
   const handleCreateShareLink = async (id: string) => {
     try {
       const { shareToken } = await createShareLink(id);
@@ -412,6 +429,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
                 onDelete={canCreateWhiteboard ? handleDelete : undefined}
                 onRename={canCreateWhiteboard ? handleRename : undefined}
                 onCopy={canCreateWhiteboard ? handleCopy : undefined}
+                onExport={canCreateWhiteboard ? handleExport : undefined}
                 onCreateShareLink={canCreateWhiteboard ? handleCreateShareLink : undefined}
                 onRevokeShareLink={canCreateWhiteboard ? handleRevokeShareLink : undefined}
                 onUpdateShareVisibility={

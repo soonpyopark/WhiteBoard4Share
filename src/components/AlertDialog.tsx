@@ -28,7 +28,7 @@ export function AlertDialog({
         <h2 id="alert-dialog-title" className="modal-title">
           {title}
         </h2>
-        <p id="alert-dialog-body" className="modal-body">
+        <p id="alert-dialog-body" className="modal-body modal-body--preline">
           {body}
         </p>
         <div className="modal-actions">

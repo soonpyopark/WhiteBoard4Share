@@ -1,7 +1,12 @@
-import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { APP_CONFIG } from './app-config.ts';
+import {
+  getAutoLaunchState,
+  setAutoLaunch,
+  START_HIDDEN_ARG,
+} from './autoLaunchService.ts';
 import { DEFAULT_PORT, parsePort } from '../config/ports.ts';
 import { loadEnvFromAppRoot } from '../config/loadEnv.ts';
 import {
@@ -10,6 +15,12 @@ import {
   startServer,
   stopServer,
 } from '../server/startServer.ts';
+import {
+  applyConfiguredDataDirToEnv,
+  getDataRootState,
+  updateSettings,
+} from '../server/settingsService.ts';
+import { getAppRoot, getDefaultDataDir } from '../server/paths.ts';
 
 const APP_ID = 'com.whiteboard4share.app';
 
@@ -18,6 +29,7 @@ let splashWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let serverPort: number | null = null;
+const launchedHidden = process.argv.includes(START_HIDDEN_ARG);
 
 function isElectronDev(): boolean {
   return !app.isPackaged && process.env.ELECTRON_DEV === '1';
@@ -335,10 +347,11 @@ async function requestQuit(): Promise<void> {
 async function createWindow(): Promise<void> {
   const appRoot = resolveAppRoot();
   process.env.ELECTRON_APP_ROOT = appRoot;
-  process.env.WHITE_BOARD_DATA_DIR = path.join(appRoot, 'data');
   process.env.ELECTRON_DIST_DIR = resolveDistDir();
 
   loadEnvFromAppRoot(appRoot);
+  const dataDir = await applyConfiguredDataDirToEnv();
+  console.log(`[data] dataDir=${dataDir}`);
 
   if (isElectronDev()) {
     serverPort = parsePort(process.env.PORT, DEFAULT_PORT);
@@ -358,6 +371,7 @@ async function createWindow(): Promise<void> {
     show: false,
     icon: resolveWindowIcon(),
     webPreferences: {
+      preload: path.join(resolveElectronDir(), 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -369,6 +383,10 @@ async function createWindow(): Promise<void> {
 
   mainWindow.once('ready-to-show', () => {
     closeSplashWindow();
+    if (launchedHidden) {
+      // Stay in tray when started from login item with --hidden.
+      return;
+    }
     mainWindow?.show();
     if (isElectronDev()) {
       mainWindow?.webContents.openDevTools({ mode: 'detach' });
@@ -393,6 +411,81 @@ async function createWindow(): Promise<void> {
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
+ipcMain.handle('app:getPaths', async () => {
+  const state = await getDataRootState();
+  return {
+    appRoot: getAppRoot(),
+    defaultDataRoot: state.defaultDataRoot,
+    dataRoot: state.effective,
+    configuredDataRoot: state.configured,
+  };
+});
+
+ipcMain.handle('dialog:pickDirectory', async (event, options: { title?: string } = {}) => {
+  const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  const dialogOptions: Electron.OpenDialogOptions = {
+    title: typeof options?.title === 'string' ? options.title : '데이터 디렉터리 선택',
+    properties: ['openDirectory', 'createDirectory'],
+  };
+  const result = parentWindow
+    ? await dialog.showOpenDialog(parentWindow, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions);
+  if (result.canceled || !result.filePaths[0]) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('settings:applyDataRoot', async (_event, rawPath: string | null = null) => {
+  const appRoot = getAppRoot();
+  let configured: string | null =
+    typeof rawPath === 'string' && rawPath.trim() ? rawPath.trim() : null;
+
+  if (configured) {
+    configured = path.isAbsolute(configured)
+      ? path.normalize(configured)
+      : path.resolve(appRoot, configured);
+    await fs.promises.mkdir(configured, { recursive: true });
+  }
+
+  await updateSettings({ dataRoot: configured });
+  const state = await getDataRootState();
+
+  setImmediate(() => {
+    isQuitting = true;
+    app.relaunch();
+    app.exit(0);
+  });
+
+  return {
+    ok: true,
+    willRelaunch: true,
+    configured: state.configured,
+    effective: configured ?? getDefaultDataDir(),
+    defaultDataRoot: state.defaultDataRoot,
+  };
+});
+
+ipcMain.handle('app:relaunch', async () => {
+  setImmediate(() => {
+    isQuitting = true;
+    app.relaunch();
+    app.exit(0);
+  });
+  return { ok: true, willRelaunch: true };
+});
+
+ipcMain.handle('app:getAutoLaunch', () => getAutoLaunchState());
+
+ipcMain.handle(
+  'app:setAutoLaunch',
+  (_event, options: { enabled?: boolean; startHidden?: boolean } = {}) => {
+    const current = getAutoLaunchState();
+    return setAutoLaunch(
+      options.enabled ?? current.enabled,
+      options.startHidden ?? current.startHidden,
+    );
+  },
+);
+
 if (!gotSingleInstanceLock) {
   app.whenReady().then(() => {
     dialog.showMessageBoxSync({
@@ -414,7 +507,9 @@ if (!gotSingleInstanceLock) {
     }
     applyAppIcon();
     Menu.setApplicationMenu(null);
-    createSplashWindow();
+    if (!launchedHidden) {
+      createSplashWindow();
+    }
     void createWindow().catch((err) => {
       closeSplashWindow();
       console.error('[Whiteboard4Share] startup failed:', err);

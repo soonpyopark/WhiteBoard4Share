@@ -22,6 +22,21 @@ export function canManageGallery(session: Pick<AuthSessionInfo, 'role' | 'byDept
   return canCreateWhiteboard(session);
 }
 
+/** Create / delete folders — 총괄관리자만. */
+export function canCreateOrDeleteFolders(session: Pick<AuthSessionInfo, 'role'>): boolean {
+  return session.role === 'super';
+}
+
+/** Rename folder — 총괄 전체, 폴더관리자는 자기 관리 폴더만. */
+export function canRenameFolder(
+  session: Pick<AuthSessionInfo, 'role' | 'adminDept'>,
+  folderId: string,
+): boolean {
+  if (session.role === 'super') return true;
+  if (session.role === 'dept') return session.adminDept === folderId;
+  return false;
+}
+
 export interface WhiteboardVisibility {
   isPrivate?: boolean;
   isViewRestricted?: boolean;
