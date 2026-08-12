@@ -9,7 +9,7 @@ if %errorLevel% neq 0 (
   exit /b
 )
 
-set "PORT=3007"
+set "PORT=3008"
 if exist ".env" (
   for /f "tokens=2 delims==" %%P in ('findstr /i /r /b "PORT=" ".env"') do set "PORT=%%P"
 )

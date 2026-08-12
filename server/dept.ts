@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { isValidFolderId } from '../shared/folders.ts';
+import { DEFAULT_FOLDER_ID, isValidFolderId } from '../shared/folders.ts';
 import { getDataDir } from './paths.ts';
 
 const DEPT_PATTERN_LEGACY = /^\d{7}$/;
@@ -57,8 +57,12 @@ export async function ensureDefaultDepartments(): Promise<void> {
   const root = getDataDir();
   await fs.mkdir(root, { recursive: true });
 
-  for (const code of ['0000001', '0000002']) {
-    await fs.mkdir(path.join(root, code), { recursive: true });
+  // Only seed defaults on a blank data root. Recreating them on every start
+  // would bring renamed folders back after 이름 변경.
+  const existing = await listDepartments();
+  if (existing.length === 0) {
+    const { seedDefaultFolders } = await import('./foldersService.ts');
+    await seedDefaultFolders();
   }
 
   await migrateLegacyRootData(root);
@@ -68,7 +72,11 @@ export async function ensureDefaultDepartments(): Promise<void> {
 }
 
 async function migrateLegacyRootData(root: string): Promise<void> {
-  const targetDir = path.join(root, '0000001');
+  const existing = await listDepartments();
+  const targetName = existing.includes(DEFAULT_FOLDER_ID)
+    ? DEFAULT_FOLDER_ID
+    : existing[0] ?? DEFAULT_FOLDER_ID;
+  const targetDir = path.join(root, targetName);
   await fs.mkdir(targetDir, { recursive: true });
 
   let entries: string[];

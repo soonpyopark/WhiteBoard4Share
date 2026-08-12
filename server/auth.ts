@@ -25,6 +25,7 @@ export interface AuthenticatedUser {
   username: string;
   role: UserRole;
   adminDept?: string;
+  displayName?: string;
 }
 
 function authSecret(): string {
@@ -68,7 +69,7 @@ export function verifySessionToken(token: string | undefined): SessionPayload | 
     const session = JSON.parse(decoded.payload) as SessionPayload;
     if (Math.floor(Date.now() / 1000) > session.exp) return null;
     if (!isValidDeptCode(session.byDept)) return null;
-    if (!session.role) session.role = 'user';
+    if (session.role === 'dept' || !session.role) session.role = 'user';
     return session;
   } catch {
     return null;
@@ -82,13 +83,6 @@ function getSuperAdminCredentials(): { username: string; password: string } {
   };
 }
 
-function getDeptAdminPattern(byDept: string): { username: string; password: string } {
-  return {
-    username: `admin.${byDept}`,
-    password: `admin.${byDept}!!`,
-  };
-}
-
 function getUserPassword(): string {
   return process.env.USER_PASSWORD?.trim() || 'user!!';
 }
@@ -96,7 +90,7 @@ function getUserPassword(): string {
 export async function authenticateUser(
   username: string,
   password: string,
-  byDept: string,
+  _byDept: string,
 ): Promise<AuthenticatedUser | null> {
   const normalizedUsername = username.trim();
   const normalizedPassword = password;
@@ -111,20 +105,12 @@ export async function authenticateUser(
       void updateMemberPasswordHash(member.id, hashPassword(normalizedPassword));
     }
 
-    if (member.role === 'dept') {
-      const adminDept = member.adminDept?.trim() || byDept;
-      if (member.adminDept && member.adminDept !== byDept) return null;
-      return {
-        username: member.username,
-        role: 'dept',
-        adminDept,
-      };
-    }
+    const memberDisplayName = member.displayName?.trim() || undefined;
 
     return {
       username: member.username,
-      role: member.role,
-      ...(member.adminDept ? { adminDept: member.adminDept } : {}),
+      role: member.role === 'super' ? 'super' : 'user',
+      ...(memberDisplayName ? { displayName: memberDisplayName } : {}),
     };
   }
 
@@ -134,36 +120,6 @@ export async function authenticateUser(
     normalizedPassword === superAdmin.password
   ) {
     return { username: normalizedUsername, role: 'super' };
-  }
-
-  const explicitDeptUser = process.env.DEPT_ADMIN_USERNAME?.trim() ?? '';
-  const explicitDeptPass = process.env.DEPT_ADMIN_PASSWORD?.trim() ?? '';
-  const explicitDeptCode = process.env.DEPT_ADMIN_BY_DEPT?.trim() ?? '';
-
-  if (explicitDeptUser && explicitDeptPass) {
-    if (
-      normalizedUsername === explicitDeptUser &&
-      normalizedPassword === explicitDeptPass &&
-      (!explicitDeptCode || explicitDeptCode === byDept)
-    ) {
-      return {
-        username: normalizedUsername,
-        role: 'dept',
-        adminDept: explicitDeptCode || byDept,
-      };
-    }
-  }
-
-  const deptPattern = getDeptAdminPattern(byDept);
-  if (
-    normalizedUsername === deptPattern.username &&
-    normalizedPassword === deptPattern.password
-  ) {
-    return {
-      username: normalizedUsername,
-      role: 'dept',
-      adminDept: byDept,
-    };
   }
 
   if (normalizedPassword === getUserPassword() && normalizedUsername.length > 0) {

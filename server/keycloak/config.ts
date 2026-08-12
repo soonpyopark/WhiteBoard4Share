@@ -16,7 +16,7 @@ export interface KeycloakConfig {
 }
 
 export function getKeycloakConfig(): KeycloakConfig {
-  const port = parseInt(process.env.PORT ?? '3007', 10);
+  const port = parseInt(process.env.PORT ?? '3008', 10);
   const defaultBase = `http://localhost:${port}`;
   const keycloakUrl = (process.env.KEYCLOAK_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 

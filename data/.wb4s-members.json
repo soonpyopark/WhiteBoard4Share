@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "members": [
+    {
+      "id": "1ce639b7e0fa50c6",
+      "username": "guest",
+      "passwordHash": "9ff836dc7c9ecc65973a7d90f3017317:e5479db1cfa8846863f1ed2a2ee0e76a07074b6eca52ab8b80164bc705be032e6746169164eb9428bfd0e086e19ade3a01979c35075efe71b880a67e145af3ce",
+      "role": "user",
+      "displayName": "guest",
+      "disabled": false
+    }
+  ]
+}

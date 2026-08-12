@@ -12,6 +12,10 @@ export type FolderInfo = {
   name: string;
 };
 
+/** Seeded when the data root has no tenant folders. First entry is the default selection. */
+export const DEFAULT_FOLDER_IDS = ['업무폴더', '개인폴더'] as const;
+export const DEFAULT_FOLDER_ID: string = DEFAULT_FOLDER_IDS[0];
+
 export const MAX_FOLDER_NAME_LENGTH = 40;
 
 const INVALID_NAME_CHARS = /[/\\:*?"<>|]/;

@@ -121,7 +121,7 @@ export function mapKeycloakWhiteboardRole(
   const deptRole = config.roleDept.toLowerCase();
 
   if (roles.includes(superRole)) return 'super';
-  if (roles.includes(deptRole)) return 'dept';
+  if (roles.includes(deptRole)) return 'user';
   return null;
 }
 

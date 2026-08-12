@@ -21,7 +21,11 @@ import { useDeptSession } from '../context/DeptSessionContext';
 import { useGalleryCollab } from '../hooks/useGalleryCollab';
 import { documentToSummary, mergeGalleryBoardRemote } from '../lib/collab/gallery-sync';
 import { downloadWhiteboardFile, parseWhiteboardFile } from '../lib/whiteboard/whiteboardFile';
-import { WHITEBOARD_FILE_EXTENSION } from '../../shared/whiteboard-file';
+import {
+  WHITEBOARD_FILE_EXTENSION,
+  WHITEBOARD_JSON_EXTENSION,
+  type WhiteboardFileExtension,
+} from '../../shared/whiteboard-file';
 import { canViewWhiteboardInGallery } from '../../shared/auth';
 import { APP_CONFIG } from '../appConfig';
 
@@ -269,7 +273,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
     }
   };
 
-  const handleExport = async (id: string) => {
+  const handleExport = async (id: string, extension: WhiteboardFileExtension = WHITEBOARD_FILE_EXTENSION) => {
     try {
       const doc = await fetchWhiteboard(id);
       downloadWhiteboardFile({
@@ -279,6 +283,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
         texts: doc.texts,
         tables: doc.tables,
         thumbnail: doc.thumbnail,
+        extension,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : '내보내기에 실패했습니다');
@@ -390,7 +395,7 @@ export function GalleryView({ onOpen, onCreate, onAppHome }: GalleryViewProps) {
                 <input
                   ref={importInputRef}
                   type="file"
-                  accept={`.wb4s,application/json,*${WHITEBOARD_FILE_EXTENSION}`}
+                  accept={`.wb4s,.json,application/json,*${WHITEBOARD_FILE_EXTENSION},*${WHITEBOARD_JSON_EXTENSION}`}
                   className="gallery-import-input"
                   aria-hidden="true"
                   tabIndex={-1}

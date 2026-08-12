@@ -9,7 +9,7 @@ import {
 } from '../../api/settings.ts';
 import { useAppDialogs } from '../useAppDialogs.tsx';
 
-const DEFAULT_PORT = 3007;
+const DEFAULT_PORT = 3008;
 
 function statusLabel(info: ServerInfoDto | null): string {
   if (!info) return '확인 중…';

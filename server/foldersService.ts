@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
+  DEFAULT_FOLDER_IDS,
   isValidFolderId,
   normalizeFolderId,
   normalizeFolderName,
@@ -91,6 +92,16 @@ export async function listFolders(): Promise<FolderInfo[]> {
   return syncFolderMetadata();
 }
 
+/** Create 업무폴더 / 개인폴더 on a blank data root, 업무폴더 first. */
+export async function seedDefaultFolders(): Promise<FolderInfo[]> {
+  const folders = DEFAULT_FOLDER_IDS.map((id) => toFolderInfo(id));
+  for (const folder of folders) {
+    await fs.mkdir(getDeptDataDir(folder.id), { recursive: true });
+  }
+  await writeMetaFile(folders);
+  return folders;
+}
+
 export async function getFolder(id: string): Promise<FolderInfo | null> {
   const normalized = normalizeFolderId(id);
   if (!normalized) return null;
@@ -116,6 +127,58 @@ export async function countWhiteboardsInFolder(folderId: string): Promise<number
     count += 1;
   }
   return count;
+}
+
+async function directoryExists(dir: string): Promise<boolean> {
+  try {
+    const stat = await fs.stat(dir);
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Rename on-disk tenant folder. Windows often cannot `rename` a dir that Electron still has open. */
+async function moveDirectory(fromDir: string, toDir: string): Promise<void> {
+  if (await directoryExists(toDir)) {
+    throw Object.assign(new Error('같은 이름의 폴더가 이미 있습니다.'), { status: 409 });
+  }
+
+  try {
+    await fs.rename(fromDir, toDir);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'EPERM' && code !== 'EACCES' && code !== 'EBUSY' && code !== 'EXDEV') {
+      throw Object.assign(
+        new Error(
+          error instanceof Error
+            ? `폴더 이름을 바꾸지 못했습니다: ${error.message}`
+            : '폴더 이름을 바꾸지 못했습니다.',
+        ),
+        { status: 500 },
+      );
+    }
+    try {
+      await fs.cp(fromDir, toDir, { recursive: true });
+    } catch (copyError) {
+      await fs.rm(toDir, { recursive: true, force: true }).catch(() => undefined);
+      throw Object.assign(
+        new Error(
+          copyError instanceof Error
+            ? `폴더 이름을 바꾸지 못했습니다: ${copyError.message}`
+            : '폴더 이름을 바꾸지 못했습니다.',
+        ),
+        { status: 500 },
+      );
+    }
+  }
+
+  if (await directoryExists(fromDir)) {
+    if (!(await directoryExists(toDir))) {
+      throw Object.assign(new Error('폴더 이름을 바꾸지 못했습니다.'), { status: 500 });
+    }
+    await fs.rm(fromDir, { recursive: true, force: true });
+  }
 }
 
 export async function createFolder(nameInput: unknown): Promise<FolderInfo> {
@@ -179,27 +242,7 @@ export async function renameFolder(
 
   const fromDir = getDeptDataDir(fromId);
   const toDir = path.join(getDataDir(), toId);
-
-  try {
-    await fs.access(toDir);
-    throw Object.assign(new Error('같은 이름의 폴더가 이미 있습니다.'), { status: 409 });
-  } catch (error) {
-    if ((error as { status?: number }).status === 409) throw error;
-    /* target does not exist — ok */
-  }
-
-  try {
-    await fs.rename(fromDir, toDir);
-  } catch (error) {
-    throw Object.assign(
-      new Error(
-        error instanceof Error
-          ? `폴더 이름을 바꾸지 못했습니다: ${error.message}`
-          : '폴더 이름을 바꾸지 못했습니다.',
-      ),
-      { status: 500 },
-    );
-  }
+  await moveDirectory(fromDir, toDir);
 
   const next = folders.slice();
   next[index] = toFolderInfo(toId);

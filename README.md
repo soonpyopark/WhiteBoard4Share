@@ -1,6 +1,6 @@
 # Whiteboard4Share
 
-**버전 1.0.5** — 로컬 PC·LAN에서 동작하는 실시간 협업 화이트보드 앱입니다.  
+**버전 1.0.6** — 로컬 PC·LAN에서 동작하는 실시간 협업 화이트보드 앱입니다.  
 필압 펜 타블렛, 이미지·텍스트·표, 레이어 순서 조정, 자동 저장, Windows 포터블 exe 배포를 지원합니다.
 
 - **제작**: 청년안민규
@@ -14,11 +14,13 @@
 
 ### 갤러리 · 권한
 - 새 화이트보드 생성, 썸네일 미리보기, 이름 변경 / 삭제
-- **총괄관리자 / 폴더관리자 / 일반 사용자** 역할
-- 폴더(테넌트) 표시 이름 · 생성/이름변경/삭제 (총괄·폴더관리자 권한)
+- **총괄관리자 / 일반 사용자** 역할
+- 기본 폴더: **업무폴더**, **개인폴더** (데이터 루트가 비어 있으면 자동 생성)
+- 폴더 생성·이름변경·삭제·순서 변경 (총괄관리자, 설정 → 폴더 관리)
 - 비공개·열람 제한 등 공유 가시성 설정
 - 공유 링크로 화이트보드 열기
-- `.wb4s` 파일로 가져오기 / 내보내기
+- `.wb4s` / `.json` 파일로 가져오기 / 내보내기
+- 설정: 강조색, 회원 관리(내보내기/가져오기), 허용 IP(내보내기/가져오기)
 
 ### 그리기 & 편집
 - **도구**: 텍스트, 손(화면 이동), 선택, 올가미, 연필, 볼펜, 형광펜, 지우개, 사진 첨부, **표**
@@ -79,7 +81,6 @@
 | 역할 | 아이디 | 비밀번호 |
 |------|--------|----------|
 | 총괄관리자 | `admin` | `admin1234` |
-| 폴더관리자 | `admin.{폴더ID}` | `admin.{폴더ID}!!` |
 | 일반 사용자 | (이름+폴더로 참여) | 공용 `user!!` (레거시·관리자 로그인용) |
 
 Keycloak SSO는 `.env.example`의 `KEYCLOAK_*` 설정을 참고하세요.
@@ -107,13 +108,13 @@ npm install
 npm run dev
 ```
 
-브라우저에서 **http://localhost:3007** 접속 (`.env`의 `PORT`로 변경 가능)
+브라우저에서 **http://localhost:3008** 접속 (`.env`의 `PORT`로 변경 가능)
 
 설정 예시는 [`.env.example`](./.env.example)를 참고하세요.
 
 | 변수 | 설명 |
 |------|------|
-| `PORT` | API·프론트 포트 (기본 `3007`) |
+| `PORT` | API·프론트 포트 (기본 `3008`) |
 | `HOSTNAME` | 바인딩 주소 (기본 `127.0.0.1`, LAN은 `0.0.0.0`) |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | 총괄관리자 계정 |
 | `VITE_HOME_URL` | (선택) 갤러리 «홈» 버튼 URL |
@@ -125,7 +126,7 @@ npm run build
 npm run start
 ```
 
-`npm run start` / `npm run restart`는 Electron 창을 띄우고, 앱 안에서 서버(기본 `3007`)를 켭니다.  
+`npm run start` / `npm run restart`는 Electron 창을 띄우고, 앱 안에서 서버(기본 `3008`)를 켭니다.  
 브라우저만 쓰려면 `npm run start:web`을 사용하세요.
 
 ### Windows 포터블 exe 빌드
@@ -138,7 +139,7 @@ npm run build:dist:exe
 - 폴더: `exe/Whiteboard4Share-{version}-{YYMMDD-HHMMSS}/`
 - zip: `exe/Whiteboard4Share-{version}-{YYMMDD-HHMMSS}_portable.zip` (PC의 7-Zip 사용)
 
-예: `exe/Whiteboard4Share-1.0.5-260712-220141_portable.zip`
+예: `exe/Whiteboard4Share-1.0.6-260812-120000_portable.zip`
 
 > 7-Zip이 필요합니다. 기본 경로 `C:\Program Files\7-Zip\7z.exe` 또는 환경변수 `SEVEN_ZIP`로 지정하세요.
 
@@ -177,8 +178,8 @@ npm run build:update_all
 
 | 실행 방식 | 저장 경로 |
 |-----------|-----------|
-| `npm run dev` / `npm run start` | 프로젝트 루트 `data/{id}.json` |
-| Windows 포터블 exe | exe 파일 옆 `data/{id}.json` |
+| `npm run dev` / `npm run start` | 프로젝트 루트 `data/{폴더}/{id}.json` |
+| Windows 포터블 exe | exe 파일 옆 `data/{폴더}/{id}.json` |
 
 각 JSON에는 제목, 그림(`paths`), 이미지(`images`), 텍스트(`texts`), 표(`tables`), 썸네일 등이 포함됩니다.  
 객체는 `zIndex`로 겹침 순서가 저장됩니다.  

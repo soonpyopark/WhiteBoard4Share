@@ -8,7 +8,6 @@ import {
   type PublicMember,
 } from '../shared/members.ts';
 import type { UserRole } from '../shared/auth.ts';
-import { isValidDeptCode } from './dept.ts';
 import { getDataDir } from './paths.ts';
 
 /** Persisted under data/; plan name kept for compatibility. */
@@ -71,11 +70,6 @@ function normalizeMember(raw: unknown): MemberRecord | null {
         ? hashPassword(record.password)
         : '';
 
-  const adminDept =
-    typeof record.adminDept === 'string' && isValidDeptCode(record.adminDept.trim())
-      ? record.adminDept.trim()
-      : undefined;
-
   const displayName =
     typeof record.displayName === 'string' && record.displayName.trim()
       ? record.displayName.trim()
@@ -86,7 +80,6 @@ function normalizeMember(raw: unknown): MemberRecord | null {
     username,
     passwordHash,
     role,
-    ...(adminDept ? { adminDept } : {}),
     ...(displayName ? { displayName } : {}),
     disabled: Boolean(record.disabled),
   };
@@ -144,6 +137,12 @@ export async function listMembers(): Promise<PublicMember[]> {
   return file.members.map(toPublicMember);
 }
 
+/** Full records for JSON export (includes password hashes). Super-only API. */
+export async function exportMembers(): Promise<MemberRecord[]> {
+  const file = await readFile();
+  return file.members.map((member) => ({ ...member }));
+}
+
 export async function findMemberByUsername(username: string): Promise<MemberRecord | null> {
   const normalized = username.trim();
   if (!normalized) return null;
@@ -184,6 +183,7 @@ export type MemberUpsertInput = {
   id?: string;
   username: string;
   password?: string;
+  passwordHash?: string;
   role: UserRole;
   adminDept?: string;
   disabled?: boolean;
@@ -214,21 +214,14 @@ export async function replaceMembers(inputs: MemberUpsertInput[]): Promise<Publi
     }
     seenUsernames.add(usernameKey);
 
-    let adminDept: string | undefined;
-    if (role === 'dept') {
-      const dept = (input.adminDept ?? '').trim();
-      if (!isValidDeptCode(dept)) {
-        throw new Error(`폴더관리자 ${username}의 관리 폴더가 필요합니다.`);
-      }
-      adminDept = dept;
-    }
-
     const existing = input.id ? byId.get(input.id) : undefined;
     const id = existing?.id ?? input.id ?? randomBytes(8).toString('hex');
 
     let passwordHash = existing?.passwordHash ?? '';
     if (typeof input.password === 'string' && input.password.length > 0) {
       passwordHash = hashPassword(input.password);
+    } else if (typeof input.passwordHash === 'string' && input.passwordHash.trim()) {
+      passwordHash = input.passwordHash.trim();
     }
     if (!passwordHash) {
       throw new Error(`${username}: 비밀번호가 필요합니다.`);
@@ -244,7 +237,6 @@ export async function replaceMembers(inputs: MemberUpsertInput[]): Promise<Publi
       username,
       passwordHash,
       role,
-      ...(adminDept ? { adminDept } : {}),
       ...(displayName ? { displayName } : {}),
       disabled: Boolean(input.disabled),
     });

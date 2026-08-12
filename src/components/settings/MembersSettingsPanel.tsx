@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { UserRole } from '../../../shared/auth.ts';
 import { memberRoleToLabel, type PublicMember } from '../../../shared/members.ts';
-import { fetchMembers, saveMembers, type MemberUpsertDto } from '../../api/settings.ts';
-import { useDeptSession } from '../../context/DeptSessionContext.tsx';
+import {
+  membersExportFilename,
+  parseMembersExportPayload,
+} from '../../../shared/membersIo.ts';
+import {
+  exportMembersApi,
+  fetchMembers,
+  saveMembers,
+  type MemberUpsertDto,
+} from '../../api/settings.ts';
+import { downloadTextFile, readFileAsText } from '../../lib/downloadTextFile.ts';
 import { useAppDialogs } from '../useAppDialogs.tsx';
 
 type MemberDraft = PublicMember & {
@@ -12,17 +21,22 @@ type MemberDraft = PublicMember & {
 };
 
 function createDraft(member: PublicMember): MemberDraft {
-  return { ...member, password: '', isNew: false, markedDelete: false };
+  return {
+    ...member,
+    role: member.role === 'super' ? 'super' : 'user',
+    password: '',
+    isNew: false,
+    markedDelete: false,
+  };
 }
 
-function createNewDraft(departments: string[]): MemberDraft {
+function createNewDraft(): MemberDraft {
   return {
     id: `new-${Date.now()}`,
     username: '',
     role: 'user',
     hasPassword: false,
     disabled: false,
-    adminDept: departments[0],
     password: '',
     isNew: true,
     markedDelete: false,
@@ -31,14 +45,13 @@ function createNewDraft(departments: string[]): MemberDraft {
 
 export function MembersSettingsPanel() {
   const { alert: appAlert, confirm: appConfirm, dialogs } = useAppDialogs();
-  const { folders } = useDeptSession();
-  const departments = folders.map((folder) => folder.id);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [members, setMembers] = useState<MemberDraft[]>([]);
   const [query, setQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const loadMembers = useCallback(async () => {
     setLoading(true);
@@ -76,7 +89,7 @@ export function MembersSettingsPanel() {
   };
 
   const handleAdd = () => {
-    const draft = createNewDraft(departments);
+    const draft = createNewDraft();
     setMembers((prev) => [draft, ...prev]);
     setEditingId(draft.id);
   };
@@ -111,15 +124,11 @@ export function MembersSettingsPanel() {
         if (member.isNew && !member.password) {
           throw new Error(`${username}: 새 회원의 비밀번호를 입력하세요.`);
         }
-        if (member.role === 'dept' && !member.adminDept?.trim()) {
-          throw new Error(`${username}: 폴더관리자의 관리 폴더를 선택하세요.`);
-        }
         payload.push({
           id: member.isNew ? undefined : member.id,
           username,
-          role: member.role,
+          role: member.role === 'super' ? 'super' : 'user',
           password: member.password || undefined,
-          adminDept: member.role === 'dept' ? member.adminDept : undefined,
           disabled: Boolean(member.disabled),
           displayName: member.displayName?.trim() || undefined,
         });
@@ -133,6 +142,68 @@ export function MembersSettingsPanel() {
       await appAlert({
         title: '회원 관리',
         body: err instanceof Error ? err.message : '회원 정보를 저장하지 못했습니다.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const payload = await exportMembersApi();
+      downloadTextFile(membersExportFilename(), `${JSON.stringify(payload, null, 2)}\n`);
+      await appAlert({
+        title: '내보내기',
+        body:
+          payload.members.length === 0
+            ? '회원이 비어 있는 목록을 내보냈습니다.'
+            : `회원 ${payload.members.length}명을 내보냈습니다.`,
+      });
+    } catch (err) {
+      await appAlert({
+        title: '내보내기',
+        body: err instanceof Error ? err.message : '내보내기에 실패했습니다.',
+      });
+    }
+  };
+
+  const handleImport = async (event: { target: HTMLInputElement }) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const text = await readFileAsText(file);
+      const { members: imported } = parseMembersExportPayload(text);
+      const ok = await appConfirm({
+        title: '가져오기',
+        body:
+          `「${file.name}」에서 회원 ${imported.length}명을 가져옵니다.\n` +
+          `현재 회원 목록을 이 내용으로 바꿀까요? (파일에 없는 회원은 삭제됩니다.)`,
+        confirmLabel: '가져오기',
+      });
+      if (!ok) return;
+
+      setSaving(true);
+      const payload: MemberUpsertDto[] = imported.map((member) => ({
+        id: member.id,
+        username: member.username,
+        role: member.role === 'super' ? 'super' : 'user',
+        password: member.password,
+        passwordHash: member.passwordHash,
+        disabled: Boolean(member.disabled),
+        displayName: member.displayName,
+      }));
+      const result = await saveMembers(payload);
+      setMembers(result.members.map(createDraft));
+      setEditingId(null);
+      await appAlert({
+        title: '가져오기',
+        body: `회원 ${result.members.length}명을 가져왔습니다.`,
+      });
+    } catch (err) {
+      await appAlert({
+        title: '가져오기',
+        body: err instanceof Error ? err.message : '가져오기에 실패했습니다.',
       });
     } finally {
       setSaving(false);
@@ -163,9 +234,36 @@ export function MembersSettingsPanel() {
       {dialogs}
 
       <p className="wb-settings-help">
-        Whiteboard4Share 로그인 계정입니다. 역할은 총괄관리자 / 폴더관리자 / 일반사용자입니다.
+        Whiteboard4Share 로그인 계정입니다. 역할은 총괄관리자 / 일반사용자입니다.
         회원 파일에 같은 아이디가 있으면 <code>.env</code> 기본 계정보다 우선합니다.
+        내보내기 파일에는 비밀번호 해시가 포함됩니다.
       </p>
+
+      <div className="wb-settings-row">
+        <button
+          type="button"
+          className="modal-btn modal-btn--secondary"
+          disabled={saving}
+          onClick={() => void handleExport()}
+        >
+          내보내기
+        </button>
+        <button
+          type="button"
+          className="modal-btn modal-btn--secondary"
+          disabled={saving}
+          onClick={() => importInputRef.current?.click()}
+        >
+          가져오기
+        </button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="sr-only"
+          onChange={(event) => void handleImport(event)}
+        />
+      </div>
 
       <div className="wb-settings-row">
         <input
@@ -230,28 +328,9 @@ export function MembersSettingsPanel() {
                         }
                       >
                         <option value="super">총괄관리자</option>
-                        <option value="dept">폴더관리자</option>
                         <option value="user">일반사용자</option>
                       </select>
                     </label>
-                    {member.role === 'dept' ? (
-                      <label className="wb-settings-field">
-                        <span>관리 폴더</span>
-                        <select
-                          className="modal-input"
-                          value={member.adminDept ?? ''}
-                          onChange={(event) =>
-                            updateDraft(member.id, { adminDept: event.target.value })
-                          }
-                        >
-                          {folders.map((folder) => (
-                            <option key={folder.id} value={folder.id}>
-                              {folder.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
                     <label className="wb-settings-field">
                       <span>
                         비밀번호{member.isNew ? '' : ' (변경 시에만 입력)'}
@@ -304,12 +383,6 @@ export function MembersSettingsPanel() {
                       </div>
                       <div className="wb-settings-muted">
                         {memberRoleToLabel(member.role)}
-                        {member.role === 'dept' && member.adminDept
-                          ? ` · ${
-                              folders.find((folder) => folder.id === member.adminDept)?.name ??
-                              member.adminDept
-                            }`
-                          : ''}
                         {member.displayName ? ` · ${member.displayName}` : ''}
                       </div>
                     </div>

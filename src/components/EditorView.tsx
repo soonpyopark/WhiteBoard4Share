@@ -13,7 +13,8 @@ import { getCanvasHint } from '../canvasHint';
 import type { DrawingEngine, DeleteSelectedResult } from '../engine/drawingEngine';
 import { generateThumbnail, downloadSceneAsPng } from '../engine/thumbnailRenderer';
 import { downloadWhiteboardFile, buildWhiteboardFileDocument } from '../lib/whiteboard/whiteboardFile';
-import type { WhiteboardFileImportPayload } from '../../shared/whiteboard-file.ts';
+import type { WhiteboardFileExtension, WhiteboardFileImportPayload } from '../../shared/whiteboard-file.ts';
+import { WhiteboardExportFormatDialog } from './WhiteboardExportFormatDialog';
 import { runWhenIdle } from '../utils/idle';
 import {
   DEFAULT_DRAW_TOOL_SETTINGS,
@@ -139,6 +140,7 @@ export function EditorView({
   const [tableOptionsPlacement, setTableOptionsPlacement] =
     useState<TableOptionsPopoverPlacement>('toolbar');
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [exportFormatOpen, setExportFormatOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmBody, setDeleteConfirmBody] = useState('');
 
@@ -611,8 +613,13 @@ export function EditorView({
   };
 
   const handleExportFile = () => {
+    setExportFormatOpen(true);
+  };
+
+  const handleExportFileWithFormat = (extension: WhiteboardFileExtension) => {
     const engine = engineRef.current;
     if (!engine) return;
+    setExportFormatOpen(false);
     const paths = engine.getPathsSnapshot();
     const images = engine.getImagesSnapshot();
     const texts = engine.getTextsSnapshot();
@@ -624,6 +631,7 @@ export function EditorView({
       texts,
       tables,
       thumbnail: generateThumbnail(paths, images, 320, 200, texts, tables),
+      extension,
     });
   };
 
@@ -815,6 +823,12 @@ export function EditorView({
         confirmLabel="지우기"
         onConfirm={handleClear}
         onCancel={() => setClearConfirmOpen(false)}
+      />
+
+      <WhiteboardExportFormatDialog
+        open={exportFormatOpen}
+        onClose={() => setExportFormatOpen(false)}
+        onSelect={handleExportFileWithFormat}
       />
 
       <DeleteConfirmDialog

@@ -35,6 +35,7 @@ export type MemberUpsertDto = {
   id?: string;
   username: string;
   password?: string;
+  passwordHash?: string;
   role: UserRole;
   adminDept?: string;
   disabled?: boolean;
@@ -94,6 +95,15 @@ export function removeFirewall(port: number): Promise<{ ok: boolean; message: st
 
 export function fetchMembers(): Promise<{ members: PublicMember[] }> {
   return apiRequest('/members');
+}
+
+export function exportMembersApi(): Promise<{
+  kind: string;
+  version: number;
+  exportedAt: string;
+  members: MemberUpsertDto[];
+}> {
+  return apiRequest('/members/export');
 }
 
 export function saveMembers(members: MemberUpsertDto[]): Promise<{ members: PublicMember[] }> {

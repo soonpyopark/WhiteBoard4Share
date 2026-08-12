@@ -3,6 +3,11 @@ import type { ImageObject, PathObject, TableObject, TextObject } from './drawing
 export const WHITEBOARD_FILE_FORMAT = 'whiteboard4share' as const;
 export const WHITEBOARD_FILE_VERSION = 1 as const;
 export const WHITEBOARD_FILE_EXTENSION = '.wb4s';
+export const WHITEBOARD_JSON_EXTENSION = '.json';
+
+export type WhiteboardFileExtension =
+  | typeof WHITEBOARD_FILE_EXTENSION
+  | typeof WHITEBOARD_JSON_EXTENSION;
 
 export interface WhiteboardFileDocument {
   format: typeof WHITEBOARD_FILE_FORMAT;

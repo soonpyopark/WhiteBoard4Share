@@ -6,6 +6,7 @@ import {
 } from '../auth.ts';
 import { parseCookieHeader } from '../auth.ts';
 import { ensureDefaultDepartments, listDepartments } from '../dept.ts';
+import { DEFAULT_FOLDER_ID } from '../../shared/folders.ts';
 import { getKeycloakConfig } from './config.ts';
 import { withRequestOrigin } from './request-origin.ts';
 import { handleKeycloakLogout } from './logout-handler.ts';
@@ -14,7 +15,6 @@ import {
   createOAuthState,
   decodeJwtPayload,
   exchangeAuthorizationCode,
-  extractByDeptCode,
   getKeycloakUsername,
   KEYCLOAK_ID_TOKEN_COOKIE,
   KEYCLOAK_STATE_COOKIE,
@@ -22,7 +22,7 @@ import {
 } from './oidc.ts';
 
 function appPort(): number {
-  return parseInt(process.env.PORT ?? '3007', 10);
+  return parseInt(process.env.PORT ?? '3008', 10);
 }
 
 function resolveKeycloakConfig(req: Request) {
@@ -108,25 +108,15 @@ export function createKeycloakRouter(): Router {
       }
 
       const departments = await listDepartments();
-      const defaultDept = departments[0] ?? '0000001';
-      let byDept = defaultDept;
-      let adminDept: string | undefined;
-
-      if (role === 'dept') {
-        byDept = extractByDeptCode(username, claims) ?? defaultDept;
-        if (!departments.includes(byDept)) {
-          redirectWithError(res, config, 'unknown_dept');
-          return;
-        }
-        adminDept = byDept;
-      }
+      const byDept = departments.includes(DEFAULT_FOLDER_ID)
+        ? DEFAULT_FOLDER_ID
+        : departments[0] ?? DEFAULT_FOLDER_ID;
 
       const sessionInfo = {
         username,
         byDept,
         displayName: username,
         role,
-        adminDept,
         source: 'keycloak' as const,
       };
       const token = createSessionToken(sessionInfo);

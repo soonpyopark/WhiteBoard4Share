@@ -179,7 +179,7 @@ const isMainModule =
   path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1]);
 
 if (isMainModule) {
-  const port = Number(process.env.PORT || 3007);
+  const port = Number(process.env.PORT || 3008);
   const hostname = process.env.HOSTNAME?.trim() === '0.0.0.0' ? '0.0.0.0' : 'localhost';
   const core = createSignalingCore();
   const server = http.createServer((request, response) => {

@@ -33,9 +33,15 @@ import { allowFirewallInbound, removeFirewallInbound } from './firewallService.t
 import { isLocalClientRequest } from './ipAllowlist.ts';
 import { getKeycloakConfig } from './keycloak/config.ts';
 import { createKeycloakRouter } from './keycloak/routes.ts';
-import { listMembers, saveMembersList, type MemberUpsertInput } from './membersService.ts';
+import {
+  exportMembers,
+  listMembers,
+  saveMembersList,
+  type MemberUpsertInput,
+} from './membersService.ts';
 import { getHomeLinkConfig } from './myportal-home-link.ts';
 import { getPublicSettings, getThemeAccentColor, updateSettings } from './settingsService.ts';
+import { buildMembersExportPayload } from '../shared/membersIo.ts';
 import {
   copyWhiteboard,
   createShareLink,
@@ -221,11 +227,10 @@ export function createApiRouter(): Router {
         return;
       }
 
-      const { username, password, byDept, displayName } = req.body as {
+      const { username, password, byDept } = req.body as {
         username?: string;
         password?: string;
         byDept?: string;
-        displayName?: string;
       };
 
       const normalizedDept = byDept?.trim() ?? '';
@@ -256,7 +261,7 @@ export function createApiRouter(): Router {
       const sessionInfo = {
         username: authUser.username,
         byDept: normalizedDept,
-        displayName: displayName?.trim() || authUser.username,
+        displayName: authUser.displayName?.trim() || authUser.username,
         role: authUser.role,
         adminDept: authUser.adminDept,
         source: 'local' as const,
@@ -791,6 +796,16 @@ export function createApiRouter(): Router {
     }
   });
 
+  router.get('/members/export', requireSuper, async (_req, res) => {
+    try {
+      const records = await exportMembers();
+      res.json(buildMembersExportPayload(records));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: '회원 목록을 내보내지 못했습니다' });
+    }
+  });
+
   router.get('/members', requireSuper, async (_req, res) => {
     try {
       const members = await listMembers();
@@ -835,6 +850,7 @@ export function createApiRouter(): Router {
           username,
           role,
           password: typeof item.password === 'string' ? item.password : undefined,
+          passwordHash: typeof item.passwordHash === 'string' ? item.passwordHash : undefined,
           adminDept: typeof item.adminDept === 'string' ? item.adminDept : undefined,
           disabled: Boolean(item.disabled),
           displayName: typeof item.displayName === 'string' ? item.displayName : undefined,

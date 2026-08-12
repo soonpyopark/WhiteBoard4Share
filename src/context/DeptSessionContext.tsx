@@ -21,7 +21,7 @@ import {
 import { setApiByDept } from '../api/client.ts';
 import { getOrCreateLocalUserName, saveLocalUserName } from '../lib/collab/presence-user.ts';
 import type { UserRole } from '../../shared/auth.ts';
-import { defaultFolderName } from '../../shared/folders.ts';
+import { DEFAULT_FOLDER_ID, defaultFolderName } from '../../shared/folders.ts';
 
 interface DeptSessionContextValue {
   folders: FolderInfo[];
@@ -79,9 +79,9 @@ function applyAuthSession(
     setters.setSelectedDeptState(session.byDept);
     setApiByDept(session.byDept);
     setters.setUsername(session.username ?? '');
-    if (session.displayName?.trim()) {
-      setters.setDisplayName(session.displayName.trim());
-    }
+    setters.setDisplayName(
+      session.displayName?.trim() || session.username?.trim() || '',
+    );
     setters.setRole(session.role ?? 'user');
     setters.setAdminDept(session.adminDept ?? null);
     setters.setCanCreateWhiteboard(session.canCreateWhiteboard ?? false);
@@ -95,7 +95,7 @@ function applyAuthSession(
 }
 
 function isAdminRole(role: UserRole | null | undefined): boolean {
-  return role === 'super' || role === 'dept';
+  return role === 'super';
 }
 
 function coerceFolders(
@@ -108,7 +108,7 @@ function coerceFolders(
 
 export function DeptSessionProvider({ children }: { children: ReactNode }) {
   const [folders, setFoldersState] = useState<FolderInfo[]>([]);
-  const [selectedDept, setSelectedDeptState] = useState('0000001');
+  const [selectedDept, setSelectedDeptState] = useState(DEFAULT_FOLDER_ID);
   const [authenticated, setAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState(() => getOrCreateLocalUserName());
@@ -192,7 +192,11 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
         const folderList = coerceFolders(deptResult.folders, deptResult.departments);
         setFoldersState(folderList);
         const ids = folderList.map((folder) => folder.id);
-        const deptForJoin = ids.includes(selectedDept) ? selectedDept : ids[0] ?? '';
+        const deptForJoin = ids.includes(selectedDept)
+          ? selectedDept
+          : ids.includes(DEFAULT_FOLDER_ID)
+            ? DEFAULT_FOLDER_ID
+            : ids[0] ?? '';
         if (deptForJoin) {
           setSelectedDeptState(deptForJoin);
         }
@@ -240,7 +244,6 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
         username: loginUsername,
         password,
         byDept: selectedDept,
-        displayName: displayNameRef.current,
       });
       applySession({ ...result, authenticated: true });
     },
@@ -279,7 +282,7 @@ export function DeptSessionProvider({ children }: { children: ReactNode }) {
     setRole(null);
     setAdminDept(null);
     setCanCreateWhiteboard(false);
-    await joinAsUser(selectedDept, displayNameRef.current);
+    await joinAsUser(selectedDept, getOrCreateLocalUserName());
   }, [joinAsUser, keycloakEnabled, selectedDept]);
 
   const value = useMemo(

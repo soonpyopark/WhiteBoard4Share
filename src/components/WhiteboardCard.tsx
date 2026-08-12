@@ -7,6 +7,7 @@ import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { RenameDialog } from './RenameDialog';
 import { ShareLinkCopiedDialog } from './ShareLinkCopiedDialog';
 import { ThumbnailPreview } from './ThumbnailPreview';
+import type { WhiteboardFileExtension } from '../../shared/whiteboard-file.ts';
 
 interface WhiteboardCardProps {
   board: WhiteboardSummary;
@@ -14,7 +15,7 @@ interface WhiteboardCardProps {
   onDelete?: (id: string) => void;
   onRename?: (id: string, title: string) => void;
   onCopy?: (id: string) => void;
-  onExport?: (id: string) => void;
+  onExport?: (id: string, extension?: WhiteboardFileExtension) => void;
   onCreateShareLink?: (id: string) => void;
   onRevokeShareLink?: (id: string) => void;
   onUpdateShareVisibility?: (
@@ -95,9 +96,9 @@ export function WhiteboardCard({
     onCopy?.(board.id);
   };
 
-  const openExport = () => {
+  const openExport = (extension: WhiteboardFileExtension = '.wb4s') => {
     setActionsOpen(false);
-    onExport?.(board.id);
+    onExport?.(board.id, extension);
   };
 
   const openDelete = () => {
@@ -308,7 +309,8 @@ export function WhiteboardCard({
         onShareLink={openShareLinkAction}
         onRename={openRename}
         onCopy={openCopy}
-        onExport={openExport}
+        onExport={() => openExport('.wb4s')}
+        onExportJson={() => openExport('.json')}
         onDelete={openDelete}
       />
 

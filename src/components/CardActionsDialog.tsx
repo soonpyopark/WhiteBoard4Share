@@ -7,6 +7,7 @@ interface CardActionsDialogProps {
   onRename: () => void;
   onCopy: () => void;
   onExport: () => void;
+  onExportJson: () => void;
   onDelete: () => void;
 }
 
@@ -66,6 +67,7 @@ export function CardActionsDialog({
   onRename,
   onCopy,
   onExport,
+  onExportJson,
   onDelete,
 }: CardActionsDialogProps) {
   if (!open) return null;
@@ -79,9 +81,19 @@ export function CardActionsDialog({
         aria-labelledby="card-actions-dialog-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 id="card-actions-dialog-title" className="modal-title">
-          화이트보드 작업
-        </h2>
+        <div className="card-actions-dialog-header">
+          <h2 id="card-actions-dialog-title" className="modal-title">
+            화이트보드 작업
+          </h2>
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={onClose}
+            aria-label="닫기"
+          >
+            ×
+          </button>
+        </div>
         <p className="modal-body card-actions-dialog-subtitle" title={boardTitle}>
           {boardTitle}
         </p>
@@ -108,7 +120,13 @@ export function CardActionsDialog({
             <span className="card-actions-icon">
               <ExportIcon />
             </span>
-            내보내기
+            내보내기 (.wb4s)
+          </button>
+          <button type="button" className="card-actions-item" role="menuitem" onClick={onExportJson}>
+            <span className="card-actions-icon">
+              <ExportIcon />
+            </span>
+            내보내기 (.json)
           </button>
           <button
             type="button"

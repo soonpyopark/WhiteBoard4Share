@@ -1,6 +1,6 @@
 export type WebServerMode = 'local' | 'lan';
 
-const FALLBACK_PORT = 3007;
+const FALLBACK_PORT = 3008;
 
 export function normalizeWebServerPort(value: unknown): number | null {
   const parsed = typeof value === 'number' ? value : Number(String(value ?? '').trim());

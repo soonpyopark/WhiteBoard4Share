@@ -1,6 +1,6 @@
 import { loadEnvFiles } from './loadEnv.ts';
 
-const DEFAULT_PORT = 3007;
+const DEFAULT_PORT = 3008;
 
 export { DEFAULT_PORT };
 
@@ -12,7 +12,7 @@ export function parsePort(value: string | undefined, fallback: number = DEFAULT_
 
 loadEnvFiles();
 
-/** 앱 포트 (프론트 + API 공통). `.env`의 `PORT`로 설정 (기본 3007). */
+/** 앱 포트 (프론트 + API 공통). `.env`의 `PORT`로 설정 (기본 3008). */
 export const PORT = parsePort(process.env.PORT, DEFAULT_PORT);
 
 /** 바인딩 주소. `.env`의 `HOSTNAME` (기본 127.0.0.1). */

@@ -22,7 +22,7 @@ function clearKeycloakCookies(res: Response, req: Request): void {
 
 export function handleKeycloakLogout(req: Request, res: Response): void {
   const base = getKeycloakConfig();
-  const port = parseInt(process.env.PORT ?? '3007', 10);
+  const port = parseInt(process.env.PORT ?? '3008', 10);
   const config = withRequestOrigin(base, req, port);
 
   const cookies = parseCookieHeader(req.headers.cookie);

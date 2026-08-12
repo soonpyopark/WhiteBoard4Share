@@ -10,7 +10,7 @@ if /I not "%~1"=="_inner" (
 if /I "%~1"=="_inner" shift
 if /I "%~1"=="_quiet" set "QUIET=1" & shift
 
-set PORT=3007
+set PORT=3008
 if exist ".env" for /f "tokens=2 delims==" %%P in ('findstr /i /b "PORT=" ".env"') do set PORT=%%P
 
 if not defined QUIET echo Stopping Whiteboard4Share server on port %PORT%...

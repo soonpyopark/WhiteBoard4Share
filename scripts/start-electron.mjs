@@ -49,9 +49,9 @@ function loadSettingsPort() {
 
 const port =
   Number.parseInt(
-    process.env.PORT ?? loadDotEnvPort() ?? loadSettingsPort() ?? '3007',
+    process.env.PORT ?? loadDotEnvPort() ?? loadSettingsPort() ?? '3008',
     10,
-  ) || 3007;
+  ) || 3008;
 
 function killPort(targetPort) {
   if (process.platform === 'win32') {

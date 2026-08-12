@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const port = Number.parseInt(process.env.PORT ?? '3007', 10) || 3007;
+const port = Number.parseInt(process.env.PORT ?? '3008', 10) || 3008;
 const devUrl = `http://127.0.0.1:${port}`;
 
 execSync('node scripts/prepare-icon.mjs', { cwd: root, stdio: 'inherit' });

@@ -1,23 +1,15 @@
 import { useState } from 'react';
-import type { UserRole } from '../../shared/auth.ts';
 import { folderDisplayLabel } from '../../shared/folders.ts';
 import { useDeptSession } from '../context/DeptSessionContext.tsx';
 import { LoginDialog } from './LoginDialog';
 import { SettingsButton } from './SettingsButton';
 import { UpdateHelpButton } from './UpdateHelpButton';
 
-function adminRoleLabel(role: UserRole | null): string | null {
-  if (role === 'super') return '총괄관리자';
-  if (role === 'dept') return '폴더관리자';
-  return null;
-}
-
 export function GalleryAuthBar() {
   const {
     folders,
     selectedDept,
     authenticated,
-    username,
     displayName,
     setDisplayName,
     commitDisplayName,
@@ -36,9 +28,8 @@ export function GalleryAuthBar() {
   const [error, setError] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  const isAdmin = authenticated && (role === 'super' || role === 'dept');
-  const isSuper = authenticated && role === 'super';
-  const adminLabel = adminRoleLabel(role);
+  const isAdmin = authenticated && role === 'super';
+  const isSuper = isAdmin;
   const canOpenLogin = !isAdmin && (allowLocalLogin || keycloakEnabled);
 
   const handleDeptChange = async (dept: string) => {
@@ -93,21 +84,6 @@ export function GalleryAuthBar() {
   return (
     <div className="gallery-auth-bar">
       <div className="gallery-auth-identity">
-        <div className="gallery-auth-user">
-          <span className="gallery-auth-label">사용자 :</span>
-          <label className="gallery-auth-field">
-            <span className="sr-only">사용자</span>
-            <input
-              type="text"
-              className="gallery-auth-input gallery-auth-display-name"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              onBlur={commitDisplayName}
-              aria-label="사용자"
-            />
-          </label>
-        </div>
-
         <div className="gallery-auth-dept">
           <span className="gallery-auth-label">폴더 :</span>
           <label className="gallery-auth-field">
@@ -125,13 +101,25 @@ export function GalleryAuthBar() {
             </select>
           </label>
         </div>
+
+        <div className="gallery-auth-user">
+          <span className="gallery-auth-label">사용자 :</span>
+          <label className="gallery-auth-field">
+            <span className="sr-only">사용자</span>
+            <input
+              type="text"
+              className="gallery-auth-input gallery-auth-display-name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              onBlur={commitDisplayName}
+              aria-label="사용자"
+            />
+          </label>
+        </div>
       </div>
 
       {isAdmin ? (
         <div className="gallery-auth-admin">
-          <span className="gallery-auth-admin-badge">
-            {adminLabel}, {username}
-          </span>
           {isSuper ? <SettingsButton canOpen /> : null}
           <UpdateHelpButton />
           <button

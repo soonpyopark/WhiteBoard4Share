@@ -80,7 +80,7 @@ export function login(params: {
   username: string;
   password: string;
   byDept: string;
-  displayName: string;
+  displayName?: string;
 }): Promise<AuthSessionResponse> {
   return apiRequest('/auth/login', {
     method: 'POST',

@@ -1,11 +1,13 @@
 import type {
   WhiteboardFileDocument,
+  WhiteboardFileExtension,
   WhiteboardFileImportPayload,
 } from '../../../shared/whiteboard-file.ts';
 import {
   WHITEBOARD_FILE_EXTENSION,
   WHITEBOARD_FILE_FORMAT,
   WHITEBOARD_FILE_VERSION,
+  WHITEBOARD_JSON_EXTENSION,
 } from '../../../shared/whiteboard-file.ts';
 import type { ImageObject, PathObject, TableObject, TextObject } from '../../engine/types';
 import { createId } from '../../utils/id';
@@ -67,15 +69,20 @@ export function downloadWhiteboardFile(input: {
   texts?: TextObject[];
   tables?: TableObject[];
   thumbnail?: string;
+  extension?: WhiteboardFileExtension;
 }): void {
   const doc = buildWhiteboardFileDocument(input);
   const json = JSON.stringify(doc, null, 2);
   const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const base = sanitizeFilename(input.title.trim() || 'whiteboard', 'whiteboard');
+  const extension =
+    input.extension === WHITEBOARD_JSON_EXTENSION
+      ? WHITEBOARD_JSON_EXTENSION
+      : WHITEBOARD_FILE_EXTENSION;
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${base}${WHITEBOARD_FILE_EXTENSION}`;
+  link.download = `${base}${extension}`;
   link.rel = 'noopener';
   document.body.appendChild(link);
   link.click();
