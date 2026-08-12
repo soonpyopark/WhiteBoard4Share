@@ -48,7 +48,7 @@
 - 설치 없이 USB 폴더로 배포·실행
 - 창을 닫으면 **트레이**로 최소화 (완전 종료는 트레이 메뉴 Exit)
 - **단일 인스턴스** — 이미 실행 중이면 안내 후 재실행하지 않음
-- 갤러리 도움말(`?`)에서 **GitHub Releases 업데이트 확인**
+- 갤러리 도움말(`?`)에서 **GitHub Releases 업데이트 확인** (버전 + 빌드 시각)
 - LAN 공개: `.env`에서 `HOSTNAME=0.0.0.0` + `allow-firewall-inbound.bat`(관리자)
 
 ---
@@ -141,6 +141,9 @@ npm run build:dist:exe
 
 예: `exe/Whiteboard4Share-1.0.6-260812-120000_portable.zip`
 
+같은 스탬프가 `src/appConfig.ts`의 `buildStamp`에 기록되어, 업데이트 확인이 **버전뿐 아니라 빌드 시각**도 비교합니다.  
+(`WB4S_BUILD_STAMP=260812-120000`, `WB4S_SKIP_STAMP=1` 로 재사용 가능)
+
 > 7-Zip이 필요합니다. 기본 경로 `C:\Program Files\7-Zip\7z.exe` 또는 환경변수 `SEVEN_ZIP`로 지정하세요.
 
 ### 컴포넌트 일괄 업데이트
@@ -180,6 +183,16 @@ npm run build:update_all
 |-----------|-----------|
 | `npm run dev` / `npm run start` | 프로젝트 루트 `data/{폴더}/{id}.json` |
 | Windows 포터블 exe | exe 파일 옆 `data/{폴더}/{id}.json` |
+
+메타 파일은 모두 `data/` 루트에 둡니다.
+
+| 파일 | 내용 |
+|------|------|
+| `data/.wb4s-folders.json` | 폴더 목록 |
+| `data/.wb4s-members.json` | 회원 |
+| `data/.wb4s-settings.json` | 포트·테마·허용 IP·데이터 루트 등 |
+
+기본 폴더는 **업무폴더**, **개인폴더**입니다. 데이터 루트가 비어 있으면 자동으로 만들고, `build:dist:exe`도 같은 구조로 시드합니다.
 
 각 JSON에는 제목, 그림(`paths`), 이미지(`images`), 텍스트(`texts`), 표(`tables`), 썸네일 등이 포함됩니다.  
 객체는 `zIndex`로 겹침 순서가 저장됩니다.  

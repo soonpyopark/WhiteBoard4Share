@@ -188,7 +188,7 @@ export function ServerSettingsPanel() {
         <h3 className="wb-settings-section-title">포트</h3>
         <p className="wb-settings-help">
           HTTP·Yjs 서버가 사용하는 TCP 포트입니다. 저장하면{' '}
-          <code>.wb4s-settings.json</code>에 기록되어 <code>.env</code>의 <code>PORT</code>보다
+          <code>data/.wb4s-settings.json</code>에 기록되어 <code>.env</code>의 <code>PORT</code>보다
           우선 적용됩니다. 저장하지 않으면 .env(없으면 {DEFAULT_PORT})를 따릅니다.
         </p>
         <div className="wb-settings-row">

@@ -18,9 +18,18 @@ import {
   normalizeSceneZIndices,
   type LayerMove,
 } from './sceneObject';
+import {
+  ERASER_STROKE_PREVIEW_COLOR,
+  ERASER_STROKE_PREVIEW_OPACITY,
+} from '../eraserSettings';
 import { createPathFromStroke, getPathWorldBounds } from './pathObject';
 import { renderLiveStroke, renderPath } from './pathRenderer';
 import { cloneImages, clonePaths, cloneTables, cloneTexts } from './sceneClone';
+import {
+  clearStrokeBakes,
+  invalidateStrokeBake,
+  pruneStrokeBakes,
+} from './strokeBakeCache';
 import {
   createUniformColWidths,
   createUniformRowHeights,
@@ -129,6 +138,8 @@ export class DrawingEngine {
   private selectedIds: string[] = [];
   private isDrawing = false;
   private strokePoints: StrokePoint[] = [];
+  private pendingStrokePoints: StrokePoint[] = [];
+  private strokeFlushRafId: number | null = null;
   private strokeOptions: DrawingOptions | null = null;
   private strokePreset: ToolPreset | null = null;
   private lassoPoints: LassoPoint[] | null = null;
@@ -155,6 +166,7 @@ export class DrawingEngine {
   private redoStack: HistoryEntry[] = [];
   private readonly maxHistory = 50;
   private dpr = 1;
+  /** 월드 좌표 씬 캐시 — pan/zoom과 무관하게 유지 */
   private sceneCache: HTMLCanvasElement | null = null;
   private sceneCacheCtx: CanvasRenderingContext2D | null = null;
   private sceneCacheValid = false;
@@ -162,13 +174,20 @@ export class DrawingEngine {
   private sceneCacheRenderedImages = 0;
   private sceneCacheRenderedTexts = 0;
   private sceneCacheRenderedTables = 0;
-  private sceneCacheViewKey = '';
+  private sceneCacheOriginX = 0;
+  private sceneCacheOriginY = 0;
+  private sceneCacheWorldW = 0;
+  private sceneCacheWorldH = 0;
+  private sceneCachePixelScale = 1;
+  private sceneCacheLayoutKey = '';
   private sceneCacheBuildRafId: number | null = null;
   private sceneCacheBuildSortedIndex = 0;
   private sceneCacheSortedObjects: SceneObject[] = [];
   private sceneCacheBuilding = false;
   private static readonly SCENE_CACHE_CHUNK_OBJECTS = 40;
   private static readonly SCENE_CACHE_INCREMENTAL_THRESHOLD = 20;
+  private static readonly SCENE_CACHE_MAX_EDGE = 8192;
+  private static readonly SCENE_CACHE_PAD = 160;
   private dragBaseCache: HTMLCanvasElement | null = null;
   private dragBaseCacheCtx: CanvasRenderingContext2D | null = null;
   private panBaseCache: HTMLCanvasElement | null = null;
@@ -323,6 +342,7 @@ export class DrawingEngine {
       } else {
         this.paths.push(cloned);
       }
+      invalidateStrokeBake(cloned.id);
       this.commitRemoteVisualUpdate();
     } finally {
       this.suppressPathsChange = false;
@@ -439,6 +459,7 @@ export class DrawingEngine {
     this.tables = JSON.parse(JSON.stringify(tables)) as TableObject[];
     normalizeSceneZIndices(this.paths, this.images, this.texts, this.tables);
     this.selectedIds = [];
+    this.abortLiveStrokeInput();
     this.isDrawing = false;
     this.strokePoints = [];
     this.lassoPoints = null;
@@ -456,6 +477,7 @@ export class DrawingEngine {
       }
     }
     await preloadImages(this.images);
+    clearStrokeBakes();
     this.invalidateSceneCache();
     this.notifySelection();
     this.redraw();
@@ -606,7 +628,6 @@ export class DrawingEngine {
     this.viewScale = nextScale;
     this.viewOffsetX = anchorScreenX - worldX * this.viewScale;
     this.viewOffsetY = anchorScreenY - worldY * this.viewScale;
-    this.invalidateSceneCache();
     this.redraw();
     this.notifyZoomChange();
   }
@@ -643,7 +664,6 @@ export class DrawingEngine {
     this.viewScale = scale;
     this.viewOffsetX = (viewportWidth - bounds.w * scale) / 2 - bounds.x * scale;
     this.viewOffsetY = (viewportHeight - bounds.h * scale) / 2 - bounds.y * scale;
-    this.invalidateSceneCache();
     this.redraw();
     this.notifyZoomChange();
   }
@@ -663,7 +683,6 @@ export class DrawingEngine {
       this.viewOffsetY = viewportHeight / 2 - centerY;
     }
 
-    this.invalidateSceneCache();
     this.redraw();
     this.notifyZoomChange();
   }
@@ -672,7 +691,6 @@ export class DrawingEngine {
     this.viewScale = 1;
     this.viewOffsetX = 0;
     this.viewOffsetY = 0;
-    this.invalidateSceneCache();
     this.redraw();
     this.notifyZoomChange();
   }
@@ -716,7 +734,6 @@ export class DrawingEngine {
     if (!this.panDrag) return;
     this.panDrag = null;
     this.clearPanBaseCache();
-    this.invalidateSceneCache();
     this.redraw();
   }
 
@@ -736,7 +753,6 @@ export class DrawingEngine {
     canvas.style.height = `${height}px`;
     this.dpr = dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.invalidateSceneCache();
     this.redraw();
   }
 
@@ -1323,7 +1339,64 @@ export class DrawingEngine {
     this.notifyPathsChange();
   }
 
+  private cancelStrokeFlush(): void {
+    if (this.strokeFlushRafId == null) return;
+    cancelAnimationFrame(this.strokeFlushRafId);
+    this.strokeFlushRafId = null;
+  }
+
+  private abortLiveStrokeInput(): void {
+    this.cancelStrokeFlush();
+    this.pendingStrokePoints = [];
+  }
+
+  private flushPendingStrokePoints(): void {
+    this.cancelStrokeFlush();
+    if (!this.isDrawing || !this.strokeOptions || !this.strokePreset) {
+      this.pendingStrokePoints = [];
+      return;
+    }
+    if (this.pendingStrokePoints.length === 0) return;
+    const points = this.pendingStrokePoints;
+    this.pendingStrokePoints = [];
+    this.applyStrokePointBatch(points);
+  }
+
+  /** 새 점만 증분 프리뷰. 연필·형광펜도 전체 redraw 하지 않음 */
+  private applyStrokePointBatch(points: StrokePoint[]): void {
+    if (!this.strokeOptions || !this.strokePreset) return;
+
+    for (const point of points) {
+      this.strokePoints.push(point);
+
+      if (this.strokePoints.length < 2) {
+        this.renderPreviewDot(point);
+        continue;
+      }
+
+      if (this.strokePoints.length < 3) {
+        this.renderPreviewSegment(this.strokePoints[this.strokePoints.length - 2]!, point);
+        continue;
+      }
+
+      const len = this.strokePoints.length;
+      const smoothed = catmullRomSpline(
+        [this.strokePoints[len - 3]!, this.strokePoints[len - 2]!, point],
+        getStylusCatmullSegments(),
+      );
+
+      for (let i = 1; i < smoothed.length; i++) {
+        this.renderPreviewSegment(smoothed[i - 1]!, smoothed[i]!);
+      }
+    }
+  }
+
+  private isStrokeEraserPreview(): boolean {
+    return this.strokeOptions?.tool === 'eraser' && this.strokeOptions.eraserMode === 'stroke';
+  }
+
   beginStroke(point: StrokePoint, options: DrawingOptions, preset: ToolPreset): void {
+    this.abortLiveStrokeInput();
     this.isDrawing = true;
     this.strokePoints = [point];
     this.strokeOptions = options;
@@ -1335,50 +1408,23 @@ export class DrawingEngine {
     this.extendStrokePoints([point]);
   }
 
-  /** coalesced 포인트를 한 번에 추가 — redraw/증분 렌더는 도구별로 1회만 */
+  /** coalesced 포인트를 큐에 넣고, 프레임당 1회만 증분 프리뷰 */
   extendStrokePoints(points: StrokePoint[]): void {
     if (!this.isDrawing || !this.strokeOptions || !this.strokePreset || points.length === 0) {
       return;
     }
 
-    const opts = this.strokeOptions;
-    const preset = this.strokePreset;
-    const isEraserStroke = opts.tool === 'eraser' && opts.eraserMode === 'stroke';
-    const useFullRedraw =
-      opts.tool === 'highlighter' || opts.tool === 'pencil' || isEraserStroke;
+    this.pendingStrokePoints.push(...points);
+    if (this.strokeFlushRafId != null) return;
 
-    if (useFullRedraw) {
-      this.strokePoints.push(...points);
-      this.redraw();
-      return;
-    }
-
-    for (const point of points) {
-      this.strokePoints.push(point);
-
-      if (this.strokePoints.length < 2) {
-        this.renderPreviewDot(point, opts, preset);
-        continue;
-      }
-
-      if (this.strokePoints.length < 3) {
-        this.renderPreviewSegment(this.strokePoints[this.strokePoints.length - 2], point);
-        continue;
-      }
-
-      const len = this.strokePoints.length;
-      const smoothed = catmullRomSpline(
-        [this.strokePoints[len - 3], this.strokePoints[len - 2], point],
-        getStylusCatmullSegments(),
-      );
-
-      for (let i = 1; i < smoothed.length; i++) {
-        this.renderPreviewSegment(smoothed[i - 1], smoothed[i]);
-      }
-    }
+    this.strokeFlushRafId = requestAnimationFrame(() => {
+      this.strokeFlushRafId = null;
+      this.flushPendingStrokePoints();
+    });
   }
 
   endStroke(): PathObject | null {
+    this.flushPendingStrokePoints();
     if (!this.isDrawing || !this.strokeOptions || !this.strokePreset) return null;
 
     const options = this.strokeOptions;
@@ -1476,15 +1522,7 @@ export class DrawingEngine {
 
     this.syncSceneCache();
     this.clearBackground();
-
-    if (this.sceneCache) {
-      const canvas = this.ctx.canvas;
-      this.ctx.save();
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      this.ctx.drawImage(this.sceneCache, 0, 0, canvas.width, canvas.height);
-      this.ctx.restore();
-      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    }
+    this.blitSceneCacheToScreen();
 
     this.ctx.save();
     this.ctx.translate(this.viewOffsetX, this.viewOffsetY);
@@ -1717,6 +1755,7 @@ export class DrawingEngine {
       : snap.selectedId
         ? [snap.selectedId]
         : [];
+    this.abortLiveStrokeInput();
     this.isDrawing = false;
     this.strokePoints = [];
     this.lassoPoints = null;
@@ -1841,7 +1880,8 @@ export class DrawingEngine {
     this.sceneCacheRenderedImages = 0;
     this.sceneCacheRenderedTexts = 0;
     this.sceneCacheRenderedTables = 0;
-    this.sceneCacheViewKey = '';
+    this.sceneCacheLayoutKey = '';
+    pruneStrokeBakes(new Set(this.paths.map((path) => path.id)));
   }
 
   private cancelSceneCacheBuild(): void {
@@ -1864,16 +1904,105 @@ export class DrawingEngine {
     );
   }
 
-  private beginSceneCacheCanvas(): CanvasRenderingContext2D {
-    const cacheCtx = this.ensureSceneCacheCanvas();
-    const canvas = this.ctx.canvas;
+  private computeSceneCacheLayout(bounds: Rect): {
+    originX: number;
+    originY: number;
+    worldW: number;
+    worldH: number;
+    pixelScale: number;
+    pixelW: number;
+    pixelH: number;
+    layoutKey: string;
+  } {
+    const pad = DrawingEngine.SCENE_CACHE_PAD;
+    const originX = bounds.x - pad;
+    const originY = bounds.y - pad;
+    const worldW = Math.max(1, bounds.w + pad * 2);
+    const worldH = Math.max(1, bounds.h + pad * 2);
+    let pixelScale = 1;
+    const maxSide = Math.max(worldW, worldH);
+    if (maxSide > DrawingEngine.SCENE_CACHE_MAX_EDGE) {
+      pixelScale = DrawingEngine.SCENE_CACHE_MAX_EDGE / maxSide;
+    }
+    const pixelW = Math.max(1, Math.ceil(worldW * pixelScale));
+    const pixelH = Math.max(1, Math.ceil(worldH * pixelScale));
+    const layoutKey = [
+      originX.toFixed(2),
+      originY.toFixed(2),
+      worldW.toFixed(2),
+      worldH.toFixed(2),
+      pixelScale.toFixed(6),
+      pixelW,
+      pixelH,
+    ].join('|');
+    return { originX, originY, worldW, worldH, pixelScale, pixelW, pixelH, layoutKey };
+  }
 
-    cacheCtx.save();
+  private worldCacheContainsBounds(bounds: Rect): boolean {
+    const margin = 4;
+    return (
+      bounds.x >= this.sceneCacheOriginX + margin &&
+      bounds.y >= this.sceneCacheOriginY + margin &&
+      bounds.x + bounds.w <= this.sceneCacheOriginX + this.sceneCacheWorldW - margin &&
+      bounds.y + bounds.h <= this.sceneCacheOriginY + this.sceneCacheWorldH - margin
+    );
+  }
+
+  private applyWorldCacheTransform(ctx: CanvasRenderingContext2D): void {
+    ctx.setTransform(
+      this.sceneCachePixelScale,
+      0,
+      0,
+      this.sceneCachePixelScale,
+      -this.sceneCacheOriginX * this.sceneCachePixelScale,
+      -this.sceneCacheOriginY * this.sceneCachePixelScale,
+    );
+  }
+
+  private blitSceneCacheToScreen(): void {
+    if (!this.sceneCache || this.sceneCacheWorldW <= 0 || this.sceneCacheWorldH <= 0) return;
+
+    this.ctx.save();
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.ctx.translate(this.viewOffsetX, this.viewOffsetY);
+    this.ctx.scale(this.viewScale, this.viewScale);
+    this.ctx.drawImage(
+      this.sceneCache,
+      0,
+      0,
+      this.sceneCache.width,
+      this.sceneCache.height,
+      this.sceneCacheOriginX,
+      this.sceneCacheOriginY,
+      this.sceneCacheWorldW,
+      this.sceneCacheWorldH,
+    );
+    this.ctx.restore();
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  }
+
+  private beginSceneCacheCanvas(layout: {
+    originX: number;
+    originY: number;
+    worldW: number;
+    worldH: number;
+    pixelScale: number;
+    pixelW: number;
+    pixelH: number;
+    layoutKey: string;
+  }): CanvasRenderingContext2D {
+    const cacheCtx = this.ensureSceneCacheCanvas(layout.pixelW, layout.pixelH);
+    this.sceneCacheOriginX = layout.originX;
+    this.sceneCacheOriginY = layout.originY;
+    this.sceneCacheWorldW = layout.worldW;
+    this.sceneCacheWorldH = layout.worldH;
+    this.sceneCachePixelScale = layout.pixelScale;
+    this.sceneCacheLayoutKey = layout.layoutKey;
+
     cacheCtx.setTransform(1, 0, 0, 1, 0, 0);
     cacheCtx.fillStyle = '#ffffff';
-    cacheCtx.fillRect(0, 0, canvas.width, canvas.height);
-    cacheCtx.restore();
-    cacheCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    cacheCtx.fillRect(0, 0, layout.pixelW, layout.pixelH);
+    this.applyWorldCacheTransform(cacheCtx);
 
     return cacheCtx;
   }
@@ -1907,33 +2036,27 @@ export class DrawingEngine {
   ): void {
     if (start >= end) return;
 
-    cacheCtx.save();
-    cacheCtx.translate(this.viewOffsetX, this.viewOffsetY);
-    cacheCtx.scale(this.viewScale, this.viewScale);
-
     for (let i = start; i < end; i++) {
       const obj = objects[i];
-      if (excludeIds?.has(obj.id)) continue;
+      if (!obj || excludeIds?.has(obj.id)) continue;
       this.renderSceneObject(cacheCtx, obj);
     }
-
-    cacheCtx.restore();
   }
 
-  private markSceneCacheComplete(): void {
+  private markSceneCacheComplete(layoutKey: string): void {
     this.sceneCacheValid = true;
     this.sceneCacheRenderedPaths = this.paths.length;
     this.sceneCacheRenderedImages = this.images.length;
     this.sceneCacheRenderedTexts = this.texts.length;
     this.sceneCacheRenderedTables = this.tables.length;
-    this.sceneCacheViewKey = this.getSceneCacheViewKey();
+    this.sceneCacheLayoutKey = layoutKey;
   }
 
-  private startIncrementalSceneCacheBuild(): void {
+  private startIncrementalSceneCacheBuild(layout: ReturnType<DrawingEngine['computeSceneCacheLayout']>): void {
     this.cancelSceneCacheBuild();
 
-    const cacheCtx = this.beginSceneCacheCanvas();
-    const viewKey = this.getSceneCacheViewKey();
+    const cacheCtx = this.beginSceneCacheCanvas(layout);
+    const layoutKey = layout.layoutKey;
     this.sceneCacheSortedObjects = getSceneObjectsSorted(
       this.paths,
       this.images,
@@ -1942,7 +2065,6 @@ export class DrawingEngine {
     );
     this.sceneCacheBuilding = true;
     this.sceneCacheBuildSortedIndex = 0;
-    this.sceneCacheViewKey = viewKey;
 
     const total = this.sceneCacheSortedObjects.length;
     const firstEnd = Math.min(DrawingEngine.SCENE_CACHE_CHUNK_OBJECTS, total);
@@ -1951,18 +2073,19 @@ export class DrawingEngine {
     this.redraw();
 
     if (firstEnd >= total) {
-      this.completeIncrementalSceneCacheBuild();
+      this.completeIncrementalSceneCacheBuild(layoutKey);
       return;
     }
 
     const tick = (): void => {
-      if (!this.sceneCacheBuilding || this.getSceneCacheViewKey() !== viewKey) {
+      if (!this.sceneCacheBuilding || this.sceneCacheLayoutKey !== layoutKey) {
         this.cancelSceneCacheBuild();
         this.syncSceneCache();
         this.redraw();
         return;
       }
 
+      this.applyWorldCacheTransform(cacheCtx);
       const nextEnd = Math.min(
         this.sceneCacheBuildSortedIndex + DrawingEngine.SCENE_CACHE_CHUNK_OBJECTS,
         this.sceneCacheSortedObjects.length,
@@ -1977,7 +2100,7 @@ export class DrawingEngine {
       this.redraw();
 
       if (nextEnd >= this.sceneCacheSortedObjects.length) {
-        this.completeIncrementalSceneCacheBuild();
+        this.completeIncrementalSceneCacheBuild(layoutKey);
         return;
       }
 
@@ -1987,7 +2110,7 @@ export class DrawingEngine {
     this.sceneCacheBuildRafId = requestAnimationFrame(tick);
   }
 
-  private completeIncrementalSceneCacheBuild(): void {
+  private completeIncrementalSceneCacheBuild(layoutKey: string): void {
     if (this.sceneCacheBuildRafId !== null) {
       cancelAnimationFrame(this.sceneCacheBuildRafId);
       this.sceneCacheBuildRafId = null;
@@ -1995,33 +2118,26 @@ export class DrawingEngine {
     this.sceneCacheBuilding = false;
     this.sceneCacheBuildSortedIndex = 0;
     this.sceneCacheSortedObjects = [];
-    this.markSceneCacheComplete();
+    this.markSceneCacheComplete(layoutKey);
   }
 
-  private scheduleSceneCacheRebuild(): void {
+  private scheduleSceneCacheRebuild(layout: ReturnType<DrawingEngine['computeSceneCacheLayout']>): void {
     if (this.shouldUseIncrementalSceneCacheBuild()) {
-      this.startIncrementalSceneCacheBuild();
+      this.startIncrementalSceneCacheBuild(layout);
       return;
     }
-    this.rebuildSceneCache();
+    this.rebuildSceneCache(layout);
   }
 
-  private getSceneCacheViewKey(): string {
-    const canvas = this.ctx.canvas;
-    return `${this.viewOffsetX}|${this.viewOffsetY}|${this.viewScale}|${canvas.width}|${canvas.height}`;
-  }
-
-  private ensureSceneCacheCanvas(): CanvasRenderingContext2D {
-    const canvas = this.ctx.canvas;
+  private ensureSceneCacheCanvas(pixelW: number, pixelH: number): CanvasRenderingContext2D {
     if (!this.sceneCache) {
       this.sceneCache = document.createElement('canvas');
       this.sceneCacheCtx = this.sceneCache.getContext('2d');
     }
 
-    if (this.sceneCache.width !== canvas.width || this.sceneCache.height !== canvas.height) {
-      this.sceneCache.width = canvas.width;
-      this.sceneCache.height = canvas.height;
-      this.invalidateSceneCache();
+    if (this.sceneCache.width !== pixelW || this.sceneCache.height !== pixelH) {
+      this.sceneCache.width = pixelW;
+      this.sceneCache.height = pixelH;
     }
 
     if (!this.sceneCacheCtx) {
@@ -2066,7 +2182,7 @@ export class DrawingEngine {
     cacheCtx.restore();
     cacheCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
-    this.renderSceneObjectsToCache(cacheCtx, {
+    this.renderSceneObjectsToViewCache(cacheCtx, {
       excludeIds: new Set(this.selectedIds),
     });
   }
@@ -2113,7 +2229,8 @@ export class DrawingEngine {
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
-  private renderSceneObjectsToCache(
+  /** 스크린(뷰) 좌표 캐시용 — 드래그 베이스 등 */
+  private renderSceneObjectsToViewCache(
     cacheCtx: CanvasRenderingContext2D,
     options: {
       pathStart?: number;
@@ -2164,26 +2281,39 @@ export class DrawingEngine {
     cacheCtx.restore();
   }
 
-  private rebuildSceneCache(): void {
-    const cacheCtx = this.beginSceneCacheCanvas();
-
-    this.renderSceneObjectsToCache(cacheCtx, {
-      pathStart: 0,
-      imageStart: 0,
-      textStart: 0,
-      tableStart: 0,
-    });
-
-    this.markSceneCacheComplete();
+  private rebuildSceneCache(layout: ReturnType<DrawingEngine['computeSceneCacheLayout']>): void {
+    const cacheCtx = this.beginSceneCacheCanvas(layout);
+    const sorted = getSceneObjectsSorted(this.paths, this.images, this.texts, this.tables);
+    this.renderSortedObjectsToCache(cacheCtx, sorted, 0, sorted.length);
+    this.markSceneCacheComplete(layout.layoutKey);
   }
 
   private syncSceneCache(): void {
     if (this.sceneCacheBuilding) return;
 
-    const viewKey = this.getSceneCacheViewKey();
+    const bounds = this.getSceneBounds();
+    if (!bounds) {
+      this.sceneCacheValid = true;
+      this.sceneCacheRenderedPaths = 0;
+      this.sceneCacheRenderedImages = 0;
+      this.sceneCacheRenderedTexts = 0;
+      this.sceneCacheRenderedTables = 0;
+      this.sceneCacheWorldW = 0;
+      this.sceneCacheWorldH = 0;
+      this.sceneCacheLayoutKey = '';
+      return;
+    }
 
-    if (!this.sceneCacheValid || this.sceneCacheViewKey !== viewKey) {
-      this.scheduleSceneCacheRebuild();
+    const layout = this.computeSceneCacheLayout(bounds);
+
+    if (!this.sceneCacheValid || !this.sceneCache) {
+      this.scheduleSceneCacheRebuild(layout);
+      return;
+    }
+
+    // 패딩 밖으로 내용이 커진 경우에만 월드 캐시 재생성 (pan/zoom은 무관)
+    if (!this.worldCacheContainsBounds(bounds)) {
+      this.scheduleSceneCacheRebuild(layout);
       return;
     }
 
@@ -2206,32 +2336,48 @@ export class DrawingEngine {
       this.sceneCacheRenderedTexts > this.texts.length ||
       this.sceneCacheRenderedTables > this.tables.length
     ) {
-      this.scheduleSceneCacheRebuild();
+      this.scheduleSceneCacheRebuild(layout);
       return;
     }
 
-    const cacheCtx = this.ensureSceneCacheCanvas();
-    this.renderSceneObjectsToCache(cacheCtx, {
-      pathStart: this.sceneCacheRenderedPaths,
-      imageStart: this.sceneCacheRenderedImages,
-      textStart: this.sceneCacheRenderedTexts,
-      tableStart: this.sceneCacheRenderedTables,
-    });
+    const newPath = this.paths[this.paths.length - 1];
+    if (!newPath || !this.worldCacheContainsBounds(getPathWorldBounds(newPath))) {
+      this.scheduleSceneCacheRebuild(layout);
+      return;
+    }
+
+    const cacheCtx = this.ensureSceneCacheCanvas(this.sceneCache.width, this.sceneCache.height);
+    this.applyWorldCacheTransform(cacheCtx);
+    renderPath(cacheCtx, newPath);
     this.sceneCacheRenderedPaths = this.paths.length;
     this.sceneCacheRenderedImages = this.images.length;
     this.sceneCacheRenderedTexts = this.texts.length;
     this.sceneCacheRenderedTables = this.tables.length;
   }
 
-  private renderPreviewDot(point: StrokePoint, options: DrawingOptions, preset: ToolPreset): void {
-    const width = pressureToWidth(point, options.baseWidth, options.minWidth, options.maxWidth);
-    this.paintPreviewDab(point.x, point.y, width, options, preset, 0);
+  private renderPreviewDot(point: StrokePoint): void {
+    if (!this.strokeOptions || !this.strokePreset) return;
+    const opts = this.strokeOptions;
+    if (opts.tool === 'pencil' || opts.tool === 'highlighter' || this.isStrokeEraserPreview()) {
+      const width =
+        opts.tool === 'pencil'
+          ? pressureToWidth(point, opts.baseWidth, opts.minWidth, opts.maxWidth)
+          : opts.baseWidth;
+      this.paintPreviewLineCap(point.x, point.y, width, opts);
+      return;
+    }
+    this.paintPreviewDab(point.x, point.y, pressureToWidth(point, opts.baseWidth, opts.minWidth, opts.maxWidth), opts, this.strokePreset, 0);
   }
 
   private renderPreviewSegment(from: StrokePoint, to: StrokePoint): void {
     if (!this.strokeOptions || !this.strokePreset) return;
 
     const opts = this.strokeOptions;
+    if (opts.tool === 'pencil' || opts.tool === 'highlighter' || this.isStrokeEraserPreview()) {
+      this.paintPreviewLine(from, to, opts);
+      return;
+    }
+
     const preset = this.strokePreset;
     const widthFrom = pressureToWidth(from, opts.baseWidth, opts.minWidth, opts.maxWidth);
     const widthTo = pressureToWidth(to, opts.baseWidth, opts.minWidth, opts.maxWidth);
@@ -2248,6 +2394,54 @@ export class DrawingEngine {
       const w = widthFrom + (widthTo - widthFrom) * t;
       this.paintPreviewDab(x, y, w, opts, preset, i);
     }
+  }
+
+  private beginPreviewStrokeStyle(ctx: CanvasRenderingContext2D, options: DrawingOptions): void {
+    ctx.translate(this.viewOffsetX, this.viewOffsetY);
+    ctx.scale(this.viewScale, this.viewScale);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalCompositeOperation = 'source-over';
+
+    if (options.tool === 'eraser' && options.eraserMode === 'stroke') {
+      ctx.strokeStyle = ERASER_STROKE_PREVIEW_COLOR;
+      ctx.fillStyle = ERASER_STROKE_PREVIEW_COLOR;
+      ctx.globalAlpha = ERASER_STROKE_PREVIEW_OPACITY;
+      return;
+    }
+
+    ctx.strokeStyle = options.color;
+    ctx.fillStyle = options.color;
+    ctx.globalAlpha = options.opacity;
+  }
+
+  private paintPreviewLineCap(x: number, y: number, width: number, options: DrawingOptions): void {
+    const ctx = this.ctx;
+    ctx.save();
+    this.beginPreviewStrokeStyle(ctx, options);
+    ctx.beginPath();
+    ctx.arc(x, y, width / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private paintPreviewLine(from: StrokePoint, to: StrokePoint, options: DrawingOptions): void {
+    const ctx = this.ctx;
+    const width =
+      options.tool === 'pencil'
+        ? (pressureToWidth(from, options.baseWidth, options.minWidth, options.maxWidth) +
+            pressureToWidth(to, options.baseWidth, options.minWidth, options.maxWidth)) /
+          2
+        : options.baseWidth;
+
+    ctx.save();
+    this.beginPreviewStrokeStyle(ctx, options);
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private paintPreviewDab(

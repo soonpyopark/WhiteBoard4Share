@@ -216,8 +216,10 @@ export function GeneralSettingsPanel() {
       <section className="wb-settings-section">
         <h3 className="wb-settings-section-title">데이터 디렉터리</h3>
         <p className="wb-settings-help">
-          화이트보드·회원 데이터가 저장되는 폴더입니다. 지정하지 않으면 프로그램 폴더 아래{' '}
-          <code>data</code>를 사용합니다. 변경 후 앱을 다시 시작해야 적용됩니다.
+          화이트보드·회원·폴더 메타(<code>.wb4s-members.json</code>,{' '}
+          <code>.wb4s-folders.json</code>)가 저장되는 폴더입니다. 지정하지 않으면 프로그램
+          폴더 아래 <code>data</code>를 사용합니다. 포트·테마 등 앱 설정은 항상{' '}
+          <code>data/.wb4s-settings.json</code>에 둡니다. 변경 후 앱을 다시 시작해야 적용됩니다.
         </p>
 
         {dataRoot ? (

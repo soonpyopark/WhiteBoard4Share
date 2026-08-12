@@ -33,16 +33,21 @@ function loadDotEnvPort() {
 }
 
 function loadSettingsPort() {
-  const settingsPath = path.join(root, '.wb4s-settings.json');
-  if (!fs.existsSync(settingsPath)) return null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-    const value = Number(parsed?.webServerPort);
-    if (Number.isFinite(value) && value >= 1 && value <= 65535) {
-      return String(Math.trunc(value));
+  const candidates = [
+    path.join(root, 'data', '.wb4s-settings.json'),
+    path.join(root, '.wb4s-settings.json'), // legacy app-root location
+  ];
+  for (const settingsPath of candidates) {
+    if (!fs.existsSync(settingsPath)) continue;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      const value = Number(parsed?.webServerPort);
+      if (Number.isFinite(value) && value >= 1 && value <= 65535) {
+        return String(Math.trunc(value));
+      }
+    } catch {
+      /* ignore */
     }
-  } catch {
-    /* ignore */
   }
   return null;
 }

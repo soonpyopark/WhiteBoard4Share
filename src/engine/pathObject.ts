@@ -1,6 +1,7 @@
 import { createId } from '../utils/id';
 import { pressureToWidth } from './pressure';
 import { catmullRomSpline } from './smoothing';
+import { simplifyEpsilonForStroke, simplifyStrokePoints } from './strokeSimplify';
 import type {
   DrawingOptions,
   PathObject,
@@ -108,10 +109,18 @@ export function normalizeRect(x1: number, y1: number, x2: number, y2: number): R
   };
 }
 
+/** @deprecated 저장용 — 새 획은 RDP 단순화 후 저장하고, 렌더 시에만 보간한다. */
 export function smoothStrokePoints(points: StrokePoint[]): StrokePoint[] {
   if (points.length <= 1) return [...points];
   if (points.length === 2) return catmullRomSpline(points, 12);
   return catmullRomSpline(points, 8);
+}
+
+/** 저장된(단순화된) 점을 화면용으로 보간 */
+export function expandStrokePointsForRender(points: StrokePoint[]): StrokePoint[] {
+  if (points.length <= 1) return points;
+  if (points.length === 2) return catmullRomSpline(points, 8);
+  return catmullRomSpline(points, 5);
 }
 
 export function createPathFromStroke(
@@ -121,13 +130,14 @@ export function createPathFromStroke(
 ): PathObject | null {
   if (rawPoints.length === 0) return null;
 
-  const smoothed = smoothStrokePoints(rawPoints);
+  const epsilon = simplifyEpsilonForStroke(options.baseWidth);
+  const simplified = simplifyStrokePoints(rawPoints, epsilon);
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
 
-  for (const p of smoothed) {
+  for (const p of simplified) {
     minX = Math.min(minX, p.x);
     minY = Math.min(minY, p.y);
     maxX = Math.max(maxX, p.x);
@@ -137,7 +147,7 @@ export function createPathFromStroke(
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
 
-  const localPoints = smoothed.map((p) => ({
+  const localPoints = simplified.map((p) => ({
     ...p,
     x: p.x - cx,
     y: p.y - cy,

@@ -1,4 +1,4 @@
-import { localToWorld, worldToLocal } from './pathObject';
+import { getPathWorldBounds, localToWorld, rectsIntersect, worldToLocal } from './pathObject';
 import { getObjectLocalBounds } from './sceneObject';
 import { pressureToWidth } from './pressure';
 import type { HandleId, HandlePosition, LassoPoint, PathObject, Rect, SceneObject, StrokePoint } from './types';
@@ -29,19 +29,30 @@ function distToSegment(
 }
 
 export function hitTestPath(path: PathObject, wx: number, wy: number): boolean {
+  const worldBounds = getPathWorldBounds(path);
+  const aabbPad = 4;
+  if (
+    wx < worldBounds.x - aabbPad ||
+    wy < worldBounds.y - aabbPad ||
+    wx > worldBounds.x + worldBounds.w + aabbPad ||
+    wy > worldBounds.y + worldBounds.h + aabbPad
+  ) {
+    return false;
+  }
+
   const local = worldToLocal(wx, wy, path.transform);
   const extra = 4 / path.transform.scale;
 
   if (path.points.length === 1) {
-    const p = path.points[0];
+    const p = path.points[0]!;
     const w =
       pressureToWidth(p, path.baseWidth, path.minWidth, path.maxWidth) / 2 + extra;
     return Math.hypot(local.x - p.x, local.y - p.y) <= w;
   }
 
   for (let i = 1; i < path.points.length; i++) {
-    const a = path.points[i - 1];
-    const b = path.points[i];
+    const a = path.points[i - 1]!;
+    const b = path.points[i]!;
     const wA =
       pressureToWidth(a, path.baseWidth, path.minWidth, path.maxWidth) / 2 + extra;
     const wB =
@@ -353,22 +364,46 @@ export function hitTestHandle(
   return null;
 }
 
+function strokePointsWorldBounds(points: readonly StrokePoint[], pad: number): Rect | null {
+  if (points.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  return {
+    x: minX - pad,
+    y: minY - pad,
+    w: maxX - minX + pad * 2,
+    h: maxY - minY + pad * 2,
+  };
+}
+
 function pathHitByEraserStroke(
   path: PathObject,
   eraserPoints: StrokePoint[],
+  eraserBounds: Rect,
   baseWidth: number,
   minWidth: number,
   maxWidth: number,
 ): boolean {
   if (path.tool === 'eraser' || eraserPoints.length === 0) return false;
 
+  const pathBounds = getPathWorldBounds(path);
+  if (!rectsIntersect(pathBounds, eraserBounds)) return false;
+
   for (const p of eraserPoints) {
     if (hitTestPath(path, p.x, p.y)) return true;
   }
 
   for (let i = 1; i < eraserPoints.length; i++) {
-    const from = eraserPoints[i - 1];
-    const to = eraserPoints[i];
+    const from = eraserPoints[i - 1]!;
+    const to = eraserPoints[i]!;
     const widthFrom = pressureToWidth(from, baseWidth, minWidth, maxWidth);
     const widthTo = pressureToWidth(to, baseWidth, minWidth, maxWidth);
     const dx = to.x - from.x;
@@ -397,11 +432,20 @@ export function pathsHitByEraserStroke(
 ): PathObject[] {
   const hit: PathObject[] = [];
   const seen = new Set<string>();
+  const eraserBounds = strokePointsWorldBounds(eraserPoints, maxWidth);
+  if (!eraserBounds) return hit;
 
   for (const path of paths) {
     if (seen.has(path.id)) continue;
     if (
-      pathHitByEraserStroke(path, eraserPoints, baseWidth, minWidth, maxWidth)
+      pathHitByEraserStroke(
+        path,
+        eraserPoints,
+        eraserBounds,
+        baseWidth,
+        minWidth,
+        maxWidth,
+      )
     ) {
       seen.add(path.id);
       hit.push(path);

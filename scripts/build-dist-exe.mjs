@@ -2,17 +2,7 @@ import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-
-function formatTimestamp(date) {
-  const pad = (value) => String(value).padStart(2, '0');
-  const yy = String(date.getFullYear()).slice(2);
-  const mm = pad(date.getMonth() + 1);
-  const dd = pad(date.getDate());
-  const hh = pad(date.getHours());
-  const min = pad(date.getMinutes());
-  const ss = pad(date.getSeconds());
-  return `${yy}${mm}${dd}-${hh}${min}${ss}`;
-}
+import { resolveReleaseBuildStamp, writeAppBuildStamp } from './stamp-build.mjs';
 
 function copyDirectory(from, to) {
   fs.mkdirSync(to, { recursive: true });
@@ -69,8 +59,41 @@ function zipPortableFolder(sevenZip, folderPath, zipPath) {
   return zipPath;
 }
 
+/** Portable exe ships an empty but ready data tree (no whiteboard copies). */
+function seedCleanDataDir(dataDest) {
+  fs.rmSync(dataDest, { recursive: true, force: true });
+  const folders = ['업무폴더', '개인폴더'];
+  for (const folder of folders) {
+    fs.mkdirSync(path.join(dataDest, folder), { recursive: true });
+  }
+  fs.writeFileSync(
+    path.join(dataDest, '.wb4s-folders.json'),
+    `${JSON.stringify(
+      {
+        folders: folders.map((id) => ({ id, name: id })),
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
+  fs.writeFileSync(
+    path.join(dataDest, '.wb4s-members.json'),
+    `${JSON.stringify({ version: 1, members: [] }, null, 2)}\n`,
+    'utf8',
+  );
+}
+
+const stamp = resolveReleaseBuildStamp();
+if (process.env.WB4S_SKIP_STAMP === '1') {
+  console.log(`[build:dist:exe] reusing buildStamp=${stamp} (WB4S_SKIP_STAMP)`);
+} else {
+  writeAppBuildStamp(stamp);
+  console.log(`[build:dist:exe] stamping buildStamp=${stamp}`);
+}
+
 const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
-const buildName = `Whiteboard4Share-${pkg.version}-${formatTimestamp(new Date())}`;
+const buildName = `Whiteboard4Share-${pkg.version}-${stamp}`;
 const finalOutDir = path.resolve('exe', buildName);
 const portableZipPath = path.resolve('exe', `${buildName}_portable.zip`);
 const stagingOutDir = path.join(os.tmpdir(), `wb-exe-build-${buildName}`);
@@ -107,15 +130,9 @@ if (!fs.existsSync(winUnpackedDir)) {
 
 copyDirectory(winUnpackedDir, finalOutDir);
 
-const dataSrc = path.resolve('data');
 const dataDest = path.join(finalOutDir, 'data');
-if (fs.existsSync(dataSrc)) {
-  console.log('Copying data/ to build output...');
-  copyDirectory(dataSrc, dataDest);
-} else {
-  fs.mkdirSync(dataDest, { recursive: true });
-  console.log('Created empty data/ in build output.');
-}
+console.log('Seeding clean data/ (업무폴더, 개인폴더 + meta)…');
+seedCleanDataDir(dataDest);
 
 const envExampleSrc = path.resolve('.env.example');
 if (fs.existsSync(envExampleSrc)) {

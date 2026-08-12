@@ -2,8 +2,10 @@ import {
   ERASER_STROKE_PREVIEW_COLOR,
   ERASER_STROKE_PREVIEW_OPACITY,
 } from '../eraserSettings';
+import { expandStrokePointsForRender } from './pathObject';
 import { pressureToWidth } from './pressure';
 import { catmullRomSpline } from './smoothing';
+import { drawBakedPath } from './strokeBakeCache';
 import { isAppleStylusEnvironment } from './strokeInput';
 import type { DrawingOptions, EraserMode, PathObject, StrokePoint, ToolPreset } from './types';
 function pseudoRandom(seed: number): number {
@@ -282,49 +284,60 @@ function drawSegment(
   }
 }
 
-export function renderPath(ctx: CanvasRenderingContext2D, path: PathObject): void {
+/** 베이크 없이 직접 렌더 (베이크 생성·eraser·폴백용) */
+export function renderPathUnbaked(ctx: CanvasRenderingContext2D, path: PathObject): void {
   const { transform } = path;
+  const points = expandStrokePointsForRender(path.points);
+  const drawPath = points === path.points ? path : { ...path, points };
+
   ctx.save();
   ctx.translate(transform.cx, transform.cy);
   ctx.rotate(transform.rotation);
   ctx.scale(transform.scale, transform.scale);
 
-  if (path.tool === 'highlighter') {
-    renderHighlighterStroke(ctx, path.points, path.color, path.opacity, path.baseWidth);
+  if (drawPath.tool === 'highlighter') {
+    renderHighlighterStroke(ctx, drawPath.points, drawPath.color, drawPath.opacity, drawPath.baseWidth);
     ctx.restore();
     return;
   }
 
-  if (path.tool === 'pencil') {
+  if (drawPath.tool === 'pencil') {
     renderPencilStroke(
       ctx,
-      path.points,
-      path.color,
-      path.opacity,
-      path.baseWidth,
-      path.minWidth,
-      path.maxWidth,
-      path.textured,
+      drawPath.points,
+      drawPath.color,
+      drawPath.opacity,
+      drawPath.baseWidth,
+      drawPath.minWidth,
+      drawPath.maxWidth,
+      drawPath.textured,
     );
     ctx.restore();
     return;
   }
 
-  if (path.points.length === 1) {
-    const p = path.points[0];
-    const w = pressureToWidth(p, path.baseWidth, path.minWidth, path.maxWidth);
-    paintDab(ctx, p.x, p.y, w, path.color, path.tool, path.opacity, path.textured, 0);
+  if (drawPath.points.length === 1) {
+    const p = drawPath.points[0]!;
+    const w = pressureToWidth(p, drawPath.baseWidth, drawPath.minWidth, drawPath.maxWidth);
+    paintDab(ctx, p.x, p.y, w, drawPath.color, drawPath.tool, drawPath.opacity, drawPath.textured, 0);
     ctx.restore();
     return;
   }
 
-  for (let i = 1; i < path.points.length; i++) {
-    drawSegment(ctx, path.points[i - 1], path.points[i], path, i * 1000);
+  for (let i = 1; i < drawPath.points.length; i++) {
+    drawSegment(ctx, drawPath.points[i - 1]!, drawPath.points[i]!, drawPath, i * 1000);
   }
 
-  renderLineEnds(ctx, path);
+  renderLineEnds(ctx, drawPath);
 
   ctx.restore();
+}
+
+export function renderPath(ctx: CanvasRenderingContext2D, path: PathObject): void {
+  if (path.tool !== 'eraser' && drawBakedPath(ctx, path, renderPathUnbaked)) {
+    return;
+  }
+  renderPathUnbaked(ctx, path);
 }
 
 function segmentAngle(from: StrokePoint, to: StrokePoint): number {

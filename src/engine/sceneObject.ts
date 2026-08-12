@@ -202,6 +202,15 @@ export function hitTestTable(table: TableObject, wx: number, wy: number): boolea
   );
 }
 
+function pointInWorldBounds(wx: number, wy: number, bounds: Rect, pad = 4): boolean {
+  return (
+    wx >= bounds.x - pad &&
+    wy >= bounds.y - pad &&
+    wx <= bounds.x + bounds.w + pad &&
+    wy <= bounds.y + bounds.h + pad
+  );
+}
+
 export function hitTestSceneAt(
   paths: PathObject[],
   images: ImageObject[],
@@ -212,7 +221,9 @@ export function hitTestSceneAt(
 ): SceneObject | null {
   const sorted = getSceneObjectsSorted(paths, images, texts, tables);
   for (let i = sorted.length - 1; i >= 0; i--) {
-    const obj = sorted[i];
+    const obj = sorted[i]!;
+    if (!pointInWorldBounds(wx, wy, getObjectWorldBounds(obj))) continue;
+
     if ('points' in obj) {
       if (hitTestPath(obj, wx, wy)) return obj;
     } else if (isTextObject(obj)) {

@@ -27,13 +27,17 @@ export type DataRootState = {
 const SETTINGS_FILE = '.wb4s-settings.json';
 const DEFAULT_ACCENT = DEFAULT_ACCENT_COLOR;
 
+/**
+ * Settings always live under the app's default `data/` folder
+ * (`{appRoot}/data/.wb4s-settings.json`), not a custom dataRoot.
+ * That way `dataRoot` can be read before WHITE_BOARD_DATA_DIR is applied.
+ */
 function settingsPath(): string {
-  // Must live at app root so dataRoot can be resolved before WHITE_BOARD_DATA_DIR is set.
-  return path.join(getAppRoot(), SETTINGS_FILE);
+  return path.join(getDefaultDataDir(), SETTINGS_FILE);
 }
 
-function legacySettingsPath(): string {
-  return path.join(getDefaultDataDir(), SETTINGS_FILE);
+function legacyAppRootSettingsPath(): string {
+  return path.join(getAppRoot(), SETTINGS_FILE);
 }
 
 function normalizeStoredAccent(value: unknown): string | undefined {
@@ -81,10 +85,15 @@ export async function loadSettings(): Promise<AppSettings> {
   const primary = await readSettingsFile(settingsPath());
   if (primary) return primary;
 
-  // Migrate from older location under data/
-  const legacy = await readSettingsFile(legacySettingsPath());
+  // Migrate from older location at app root
+  const legacy = await readSettingsFile(legacyAppRootSettingsPath());
   if (legacy) {
     await saveSettings(legacy);
+    try {
+      await fs.unlink(legacyAppRootSettingsPath());
+    } catch {
+      /* ignore */
+    }
     return legacy;
   }
 
@@ -93,7 +102,7 @@ export async function loadSettings(): Promise<AppSettings> {
 
 export async function saveSettings(settings: AppSettings): Promise<AppSettings> {
   const normalized = normalizeAppSettings(settings);
-  await fs.mkdir(getAppRoot(), { recursive: true });
+  await fs.mkdir(getDefaultDataDir(), { recursive: true });
   await fs.writeFile(settingsPath(), `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
   return normalized;
 }

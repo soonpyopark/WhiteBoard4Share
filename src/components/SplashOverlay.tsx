@@ -21,7 +21,10 @@ export function SplashOverlay({ open, onClose }: SplashOverlayProps) {
         <div className="splash-overlay__content">
           <h2 className="splash-overlay__title">
             {APP_CONFIG.title}{' '}
-            <span className="splash-overlay__version">v{APP_CONFIG.version}</span>
+            <span className="splash-overlay__version">
+              v{APP_CONFIG.version}
+              {APP_CONFIG.buildStamp ? ` (${APP_CONFIG.buildStamp})` : ''}
+            </span>
           </h2>
           <a
             className="splash-overlay__url"

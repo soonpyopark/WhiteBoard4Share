@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
   DEFAULT_FOLDER_IDS,
+  isLegacyNumericFolderId,
   isValidFolderId,
   normalizeFolderId,
   normalizeFolderName,
@@ -41,7 +42,7 @@ async function readMetaFile(): Promise<FolderInfo[]> {
             ? entry.name.trim()
             : '';
       const id = normalizeFolderId(rawId);
-      if (!id || seen.has(id)) continue;
+      if (!id || isLegacyNumericFolderId(id) || seen.has(id)) continue;
       seen.add(id);
       result.push(toFolderInfo(id));
     }
@@ -80,6 +81,7 @@ export async function syncFolderMetadata(): Promise<FolderInfo[]> {
     if (diskSet.has(folder.id)) next.push(toFolderInfo(folder.id));
   }
   for (const id of idsOnDisk) {
+    if (isLegacyNumericFolderId(id)) continue;
     if (next.some((folder) => folder.id === id)) continue;
     next.push(toFolderInfo(id));
   }
@@ -92,10 +94,11 @@ export async function listFolders(): Promise<FolderInfo[]> {
   return syncFolderMetadata();
 }
 
-/** Create 업무폴더 / 개인폴더 on a blank data root, 업무폴더 first. */
+/** Create 업무폴더 / 개인폴더 on a blank (or legacy-only) data root. Never 0000001/0000002. */
 export async function seedDefaultFolders(): Promise<FolderInfo[]> {
   const folders = DEFAULT_FOLDER_IDS.map((id) => toFolderInfo(id));
   for (const folder of folders) {
+    if (isLegacyNumericFolderId(folder.id)) continue;
     await fs.mkdir(getDeptDataDir(folder.id), { recursive: true });
   }
   await writeMetaFile(folders);
@@ -184,7 +187,10 @@ async function moveDirectory(fromDir: string, toDir: string): Promise<void> {
 export async function createFolder(nameInput: unknown): Promise<FolderInfo> {
   const name = normalizeFolderName(nameInput);
   if (!name) {
-    throw Object.assign(new Error('폴더 이름이 올바르지 않습니다.'), { status: 400 });
+    throw Object.assign(
+      new Error('폴더 이름이 올바르지 않습니다. (0000001 같은 숫자 코드는 사용할 수 없습니다.)'),
+      { status: 400 },
+    );
   }
 
   const folders = await listFolders();
@@ -217,7 +223,10 @@ export async function renameFolder(
 
   const toId = normalizeFolderName(nameInput);
   if (!toId) {
-    throw Object.assign(new Error('폴더 이름이 올바르지 않습니다.'), { status: 400 });
+    throw Object.assign(
+      new Error('폴더 이름이 올바르지 않습니다. (0000001 같은 숫자 코드는 사용할 수 없습니다.)'),
+      { status: 400 },
+    );
   }
 
   const folders = await listFolders();

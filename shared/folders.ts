@@ -18,6 +18,9 @@ export const DEFAULT_FOLDER_ID: string = DEFAULT_FOLDER_IDS[0];
 
 export const MAX_FOLDER_NAME_LENGTH = 40;
 
+/** Old 7-digit dept codes (0000001 / 0000002). Never create these again. */
+const LEGACY_NUMERIC_FOLDER_RE = /^\d{7}$/;
+
 const INVALID_NAME_CHARS = /[/\\:*?"<>|]/;
 const RESERVED_FOLDER_NAMES = new Set([
   'embed',
@@ -45,6 +48,10 @@ const RESERVED_FOLDER_NAMES = new Set([
   'lpt9',
 ]);
 
+export function isLegacyNumericFolderId(value: unknown): boolean {
+  return typeof value === 'string' && LEGACY_NUMERIC_FOLDER_RE.test(value.trim());
+}
+
 export function isReservedFolderName(value: string): boolean {
   const key = value.trim().toLowerCase();
   if (!key) return true;
@@ -61,16 +68,30 @@ export function normalizeFolderName(value: unknown): string | null {
   if (INVALID_NAME_CHARS.test(trimmed)) return null;
   if (/[. ]$/.test(trimmed)) return null;
   if (isReservedFolderName(trimmed)) return null;
+  // Never allow creating/renaming to legacy 0000001-style ids.
+  if (isLegacyNumericFolderId(trimmed)) return null;
   return trimmed;
 }
 
-/** Folder id === on-disk directory name. */
+/** Folder id === on-disk directory name (create/rename). */
 export function normalizeFolderId(value: unknown): FolderId | null {
   return normalizeFolderName(value);
 }
 
 export function isValidFolderId(value: unknown): value is FolderId {
   return normalizeFolderId(value) != null;
+}
+
+/**
+ * Accepts leftover legacy numeric dirs for read/list only.
+ * New create/rename still goes through normalizeFolderName (rejects them).
+ */
+export function isReadableFolderId(value: unknown): value is FolderId {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (isLegacyNumericFolderId(trimmed)) return true;
+  return isValidFolderId(trimmed);
 }
 
 export function defaultFolderName(id: FolderId): string {

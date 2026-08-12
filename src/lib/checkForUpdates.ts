@@ -22,9 +22,10 @@ function openExternal(url: string): void {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-/** Fetch latest GitHub release and compare with the running app version. */
+/** Fetch latest GitHub release and compare with the running app version + build stamp. */
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
   const current = APP_CONFIG.version;
+  const currentBuildStamp = APP_CONFIG.buildStamp || undefined;
   try {
     const response = await fetch(RELEASES_LATEST_API, {
       headers: {
@@ -36,6 +37,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       return {
         ok: false,
         current,
+        currentBuildStamp,
         error: `GitHub 응답 오류 (HTTP ${response.status})`,
       };
     }
@@ -51,6 +53,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       return {
         ok: false,
         current,
+        currentBuildStamp,
         error: `릴리스 버전을 해석할 수 없습니다: ${payload.tag_name || '(없음)'}`,
       };
     }
@@ -60,6 +63,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
     return {
       ok: true,
       current,
+      currentBuildStamp,
       latest,
       latestBuildStamp: maxBuildStamp(assetNames),
       releaseUpdatedAt: String(payload.updated_at || payload.published_at || '').trim() || null,
@@ -69,6 +73,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
     return {
       ok: false,
       current,
+      currentBuildStamp,
       error: error instanceof Error ? error.message || '네트워크 오류' : '네트워크 오류',
     };
   }
@@ -86,7 +91,7 @@ export async function presentUpdateCheckResult(
 
   if (!result.ok) {
     const open = await dialog.confirm(
-      `업데이트 정보를 확인할 수 없습니다.\n\n${result.error || '알 수 없는 오류'}\n\n현재 버전: ${current}`,
+      `업데이트 정보를 확인할 수 없습니다.\n\n${result.error || '알 수 없는 오류'}\n\n현재 버전: ${currentHint}`,
       {
         title,
         confirmLabel: '릴리스 페이지 열기',
