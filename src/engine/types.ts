@@ -73,7 +73,7 @@ export interface HandlePosition {
 
 export const TOOL_PRESETS: Record<DrawTool, ToolPreset> = {
   pencil: {
-    opacity: 0.6,
+    opacity: 0.7,
     baseWidth: 1.5,
     minWidth: 0.5,
     maxWidth: 3,

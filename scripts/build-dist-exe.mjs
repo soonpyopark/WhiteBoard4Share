@@ -2,7 +2,15 @@ import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveReleaseBuildStamp, writeAppBuildStamp } from './stamp-build.mjs';
+import {
+  RELEASE_STAGING_DIR,
+  resolveReleaseBuildStamp,
+  shouldReleasePortable,
+  shouldSkipPublish,
+  shouldSkipStamp,
+  toFileStamp,
+  writeAppBuildStamp,
+} from './stamp-build.mjs';
 
 function copyDirectory(from, to) {
   fs.mkdirSync(to, { recursive: true });
@@ -85,7 +93,7 @@ function seedCleanDataDir(dataDest) {
 }
 
 const stamp = resolveReleaseBuildStamp();
-if (process.env.WB4S_SKIP_STAMP === '1') {
+if (shouldSkipStamp()) {
   console.log(`[build:dist:exe] reusing buildStamp=${stamp} (WB4S_SKIP_STAMP)`);
 } else {
   writeAppBuildStamp(stamp);
@@ -93,42 +101,65 @@ if (process.env.WB4S_SKIP_STAMP === '1') {
 }
 
 const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
-const buildName = `Whiteboard4Share-${pkg.version}-${stamp}`;
-const finalOutDir = path.resolve('exe', buildName);
-const portableZipPath = path.resolve('exe', `${buildName}_portable.zip`);
-const stagingOutDir = path.join(os.tmpdir(), `wb-exe-build-${buildName}`);
+const releasePortable = shouldReleasePortable();
+const fileStamp = toFileStamp(stamp);
+const buildName = releasePortable
+  ? `Whiteboard4Share v${pkg.version}_${fileStamp}`
+  : `Whiteboard4Share-${pkg.version}-${stamp}`;
+const finalOutDir = releasePortable
+  ? path.join(os.tmpdir(), 'wb-release-portable', buildName)
+  : path.resolve('exe', buildName);
+const portableZipPath = releasePortable
+  ? path.resolve('msi', `${buildName}_portable.zip`)
+  : path.resolve('exe', `${buildName}_portable.zip`);
+const stagingOutDir = shouldSkipPublish()
+  ? RELEASE_STAGING_DIR
+  : path.join(os.tmpdir(), `wb-exe-build-${buildName.replace(/[^\w.-]+/g, '-')}`);
 
-fs.mkdirSync('exe', { recursive: true });
-if (fs.existsSync(stagingOutDir)) {
-  fs.rmSync(stagingOutDir, { recursive: true, force: true });
+if (!releasePortable) {
+  fs.mkdirSync('exe', { recursive: true });
 }
+fs.mkdirSync(path.dirname(portableZipPath), { recursive: true });
 if (fs.existsSync(finalOutDir)) {
   fs.rmSync(finalOutDir, { recursive: true, force: true });
 }
 fs.rmSync(portableZipPath, { force: true });
 
 console.log(`\nBuilding USB-ready app folder: ${buildName}`);
-console.log(`Output directory: exe\\${buildName}\n`);
+console.log(
+  releasePortable
+    ? `Release portable zip: msi\\${path.basename(portableZipPath)}\n`
+    : `Output directory: exe\\${buildName}\n`,
+);
 
-execSync('node scripts/prepare-icon.mjs', { stdio: 'inherit' });
+let winUnpackedDir;
+if (shouldSkipPublish()) {
+  console.log(`[build:dist:exe] reusing publish output → ${RELEASE_STAGING_DIR}`);
+  winUnpackedDir = path.join(RELEASE_STAGING_DIR, 'win-unpacked');
+} else {
+  if (fs.existsSync(stagingOutDir)) {
+    fs.rmSync(stagingOutDir, { recursive: true, force: true });
+  }
+  execSync('node scripts/prepare-icon.mjs', { stdio: 'inherit' });
+  execSync('npm run build', { stdio: 'inherit' });
+  execSync('node scripts/build-electron.mjs', { stdio: 'inherit' });
 
-execSync('npm run build', { stdio: 'inherit' });
-execSync('node scripts/build-electron.mjs', { stdio: 'inherit' });
+  const builderCmd = [
+    'npx electron-builder',
+    '--win dir',
+    `--config.directories.output="${stagingOutDir}"`,
+  ].join(' ');
 
-const builderCmd = [
-  'npx electron-builder',
-  '--win dir',
-  `--config.directories.output="${stagingOutDir}"`,
-].join(' ');
+  execSync(builderCmd, { stdio: 'inherit' });
+  winUnpackedDir = path.join(stagingOutDir, 'win-unpacked');
+}
 
-execSync(builderCmd, { stdio: 'inherit' });
-
-const winUnpackedDir = path.join(stagingOutDir, 'win-unpacked');
 if (!fs.existsSync(winUnpackedDir)) {
   throw new Error(`Expected build output not found: ${winUnpackedDir}`);
 }
 
 copyDirectory(winUnpackedDir, finalOutDir);
+fs.rmSync(path.join(finalOutDir, '.wb4s'), { recursive: true, force: true });
 
 const dataDest = path.join(finalOutDir, 'data');
 console.log('Seeding clean data/ (업무폴더, 개인폴더 + meta)…');
@@ -144,12 +175,19 @@ if (fs.existsSync(firewallBatSrc)) {
   fs.copyFileSync(firewallBatSrc, path.join(finalOutDir, 'allow-firewall-inbound.bat'));
 }
 
-fs.rmSync(stagingOutDir, { recursive: true, force: true });
+if (!shouldSkipPublish() && stagingOutDir !== RELEASE_STAGING_DIR) {
+  fs.rmSync(stagingOutDir, { recursive: true, force: true });
+}
 
 const sevenZip = resolve7z();
 console.log(`\nPacking portable zip with 7-Zip: ${sevenZip}`);
 zipPortableFolder(sevenZip, finalOutDir, portableZipPath);
 
-console.log(
-  `\nDone. USB folder:\n  ${finalOutDir}\nPortable zip:\n  ${portableZipPath}\n  (whiteboard data: ${path.join(finalOutDir, 'data')})\n  (LAN: copy .env.example to .env, set HOSTNAME=0.0.0.0, run allow-firewall-inbound.bat as admin)\n`,
-);
+if (releasePortable) {
+  fs.rmSync(finalOutDir, { recursive: true, force: true });
+  console.log(`\nDone. Portable zip:\n  ${portableZipPath}\n`);
+} else {
+  console.log(
+    `\nDone. USB folder:\n  ${finalOutDir}\nPortable zip:\n  ${portableZipPath}\n  (whiteboard data: ${path.join(finalOutDir, 'data')})\n  (LAN: copy .env.example to .env, set HOSTNAME=0.0.0.0, run allow-firewall-inbound.bat as admin)\n`,
+  );
+}

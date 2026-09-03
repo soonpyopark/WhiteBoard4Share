@@ -42,7 +42,8 @@ export function getAutoLaunchState(): AutoLaunchState {
     return {
       supported: true,
       enabled: Boolean(settings.openAtLogin),
-      startHidden: Boolean(settings.openAtLogin && settings.openAsHidden),
+      // Electron 44 removed openAsHidden (macOS 12-only). Hidden start is Windows `--hidden`.
+      startHidden: false,
       execPath: process.execPath,
       reason: '',
     };
@@ -94,7 +95,6 @@ export function setAutoLaunch(enabled: boolean, startHidden = false): AutoLaunch
   if (enabled) {
     app.setLoginItemSettings({
       openAtLogin: true,
-      openAsHidden: hidden,
       path: process.execPath,
       args: hidden ? [START_HIDDEN_ARG] : [],
     });

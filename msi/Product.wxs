@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Per-user MSI for Whiteboard4Share (Electron).
+  Built by scripts/build-msi.mjs with:
+    -d ProductVersion=x.y.z.n -d ProductCode={guid}
+    -bindpath <repo>/msi
+  Staged payload: msi/Whiteboard4Share/**
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package
+    Name="Whiteboard4Share"
+    Manufacturer="Whiteboard4Share"
+    Version="$(ProductVersion)"
+    ProductCode="$(ProductCode)"
+    UpgradeCode="8F3C2A91-4B7E-4D6A-9C1F-2E8A5B7D4C10"
+    Scope="perUser"
+    Codepage="65001"
+    Compressed="yes">
+
+    <SummaryInformation Description="Whiteboard4Share — local/LAN collaborative whiteboard" />
+
+    <MajorUpgrade
+      AllowSameVersionUpgrades="yes"
+      Schedule="afterInstallInitialize"
+      DowngradeErrorMessage="Newer version of Whiteboard4Share is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon.ico" SourceFile="Whiteboard4Share\app-icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://note4all.tistory.com" />
+    <Property Id="REBOOT" Value="ReallySuppress" />
+    <util:CloseApplication
+      Id="CloseWhiteboard4Share"
+      Target="Whiteboard4Share.exe"
+      CloseMessage="yes"
+      ElevatedCloseMessage="yes"
+      RebootPrompt="no"
+      TerminateProcess="1"
+      Timeout="8" />
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Whiteboard4Share" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Whiteboard4Share" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Feature Id="ProductFeature" Title="Whiteboard4Share" Level="1">
+      <!-- Runtime state (data/, .wb4s/) is created beside the exe and must
+           NOT be harvested — MSI upgrades would otherwise delete it, and WiX
+           also corrupts Hangul sample names. -->
+      <Files Directory="INSTALLFOLDER" Include="Whiteboard4Share\**" />
+
+      <Component
+        Id="StartMenuShortcut"
+        Directory="ApplicationProgramsFolder"
+        Guid="D1A5C8E2-4B7F-4E3A-9C6D-8F2A1B4E7D90">
+        <Shortcut
+          Id="StartMenuShortcutLink"
+          Name="Whiteboard4Share"
+          Description="Whiteboard4Share"
+          Target="[INSTALLFOLDER]Whiteboard4Share.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="AppIcon.ico" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue
+          Root="HKCU"
+          Key="Software\Whiteboard4Share\Whiteboard4Share"
+          Name="StartMenuShortcut"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+      </Component>
+
+      <Component
+        Id="DesktopShortcut"
+        Directory="DesktopFolder"
+        Guid="E7B2F1A4-9C3D-4A8E-B6F5-1D2C8A7E4B30">
+        <Shortcut
+          Id="DesktopShortcutLink"
+          Name="Whiteboard4Share"
+          Description="Whiteboard4Share"
+          Target="[INSTALLFOLDER]Whiteboard4Share.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="AppIcon.ico" />
+        <RegistryValue
+          Root="HKCU"
+          Key="Software\Whiteboard4Share\Whiteboard4Share"
+          Name="DesktopShortcut"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+      </Component>
+    </Feature>
+  </Package>
+</Wix>

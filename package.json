@@ -21,6 +21,9 @@
     "build:electron": "node scripts/build-electron.mjs",
     "electron:dev": "npm run build && npm run build:electron && electron .",
     "build:dist:exe": "node scripts/build-dist-exe.mjs",
+    "build:msi": "node scripts/build-msi.mjs",
+    "build:release": "node scripts/build-release.mjs",
+    "update:all": "node scripts/update-all.mjs",
     "build:update_all": "update_all.bat _inner build",
     "postinstall": "node scripts/postinstall-electron.mjs"
   },
@@ -43,8 +46,8 @@
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.2",
-    "electron": "^36.2.0",
-    "electron-builder": "^26.0.12",
+    "electron": "^44.1.1",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
     "oxlint": "^1.69.0",
     "png2icons": "^2.0.1",
@@ -93,6 +96,6 @@
     }
   },
   "allowScripts": {
-    "electron@36.2.0": true
+    "electron@44.1.1": true
   }
 }

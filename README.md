@@ -145,22 +145,28 @@ npm run start
 `npm run start` / `npm run restart`는 Electron 창을 띄우고, 앱 안에서 서버(기본 `3008`)를 켭니다.  
 브라우저만 쓰려면 `npm run start:web`을 사용하세요.
 
-### Windows 포터블 exe 빌드
+### Windows 릴리스 빌드 (MSI + zip)
 
 ```bash
-npm run build:dist:exe
+npm run build:release
 ```
 
-빌드 결과:
-- 폴더: `exe/Whiteboard4Share-{version}-{YYMMDD-HHMMSS}/`
-- zip: `exe/Whiteboard4Share-{version}-{YYMMDD-HHMMSS}_portable.zip` (PC의 7-Zip 사용)
+같은 빌드 스탬프로 `msi/`에 두 파일을 만듭니다 (WiX 7 + 7-Zip 필요).
 
-예: `exe/Whiteboard4Share-1.0.6-260812-120000_portable.zip`
+- MSI: `msi/Whiteboard4Share v{version}_{YYMMDD_HHMMSS}.msi` (사용자별 설치, 관리자 권한 불필요)
+- zip: `msi/Whiteboard4Share v{version}_{YYMMDD_HHMMSS}_portable.zip`
+
+예: `msi/Whiteboard4Share v1.0.6_260812_120000.msi`
+
+USB용 폴더만 필요하면 `npm run build:dist:exe` (`exe/Whiteboard4Share-{version}-{YYMMDD-HHMMSS}/`).
+
+화이트보드 데이터는 exe 옆 `data/`, Electron 캐시는 `.wb4s/electron-profile`에 둡니다 (`%APPDATA%`에는 쓰지 않습니다).
 
 같은 스탬프가 `src/appConfig.ts`의 `buildStamp`에 기록되어, 업데이트 확인이 **버전뿐 아니라 빌드 시각**도 비교합니다.  
 (`WB4S_BUILD_STAMP=260812-120000`, `WB4S_SKIP_STAMP=1` 로 재사용 가능)
 
-> 7-Zip이 필요합니다. 기본 경로 `C:\Program Files\7-Zip\7z.exe` 또는 환경변수 `SEVEN_ZIP`로 지정하세요.
+> MSI는 [WiX CLI 7](https://wixtoolset.org/) (`winget install WiXToolset.WiXCLI`, 이후 `wix eula accept wix7`)이 필요합니다.  
+> zip은 7-Zip이 필요합니다. 기본 경로 `C:\Program Files\7-Zip\7z.exe` 또는 환경변수 `SEVEN_ZIP`로 지정하세요.
 
 ### 컴포넌트 일괄 업데이트
 
@@ -168,7 +174,7 @@ npm run build:dist:exe
 update_all.bat
 ```
 
-업데이트 + exe 빌드:
+패키지·Electron latest 업데이트 후 MSI + zip 릴리스 빌드:
 
 ```bash
 npm run build:update_all
@@ -176,7 +182,7 @@ npm run build:update_all
 
 | 옵션 | 설명 |
 |------|------|
-| `build` | 업데이트 후 `npm run build:dist:exe` 실행 |
+| `build` | 업데이트 후 `npm run build:release` 실행 (msi + zip) |
 | `force` | `npm install --force` 및 Electron 바이너리 재확인 |
 | `skip-git` | `git pull` 생략 |
 | `skip-npm` | npm 설치·빌드 생략 |
@@ -186,9 +192,10 @@ npm run build:update_all
 ### 기타 스크립트
 
 ```bash
-npm run lint          # oxlint
-npm run electron:dev  # Electron 로컬 실행 (개발용)
-npm run build:update_all
+npm run lint              # oxlint
+npm run electron:dev      # Electron 로컬 실행 (개발용)
+npm run build:release     # msi/ 에 MSI + portable zip
+npm run build:update_all  # 패키지·Electron latest 후 build:release
 ```
 
 ---
@@ -222,7 +229,7 @@ npm run build:update_all
 - Express 5 (로컬 REST API · JSON 파일 저장)
 - Yjs + WebSocket (실시간 협업·시그널링)
 - HTML5 Canvas 2D + Pointer Events
-- Electron 36 (Windows portable exe · 트레이 · 단일 인스턴스)
+- Electron latest (Windows MSI · portable zip · 트레이 · 단일 인스턴스)
 
 ---
 

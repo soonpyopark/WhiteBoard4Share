@@ -50,7 +50,7 @@ export const DEFAULT_DRAW_COLOR = '#4a4a4a';
 export const DEFAULT_HIGHLIGHTER_COLOR = '#ffeb3b';
 
 export const DEFAULT_DRAW_TOOL_SETTINGS: Record<DrawSettingsTool, DrawToolSettings> = {
-  pencil: { thickness: PENCIL_DEFAULT_SIZE, opacity: 60, color: DEFAULT_DRAW_COLOR, lineEnd: 'plain' },
+  pencil: { thickness: PENCIL_DEFAULT_SIZE, opacity: 70, color: DEFAULT_DRAW_COLOR, lineEnd: 'plain' },
   pen: { thickness: PEN_DEFAULT_SIZE, opacity: 100, color: DEFAULT_DRAW_COLOR, lineEnd: 'plain' },
   highlighter: {
     thickness: HIGHLIGHTER_DEFAULT_SIZE,

@@ -1,16 +1,16 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Whiteboard4Share - update git sources, npm/Electron stack, and optional portable exe build.
+  Whiteboard4Share - update git sources, npm/Electron stack, and optional MSI+zip release.
 
 .PARAMETER SkipGit
   Skip git pull.
 
 .PARAMETER SkipNpm
-  Skip npm install/update and Electron asset rebuild.
+  Skip npm install/update and Electron latest.
 
 .PARAMETER BuildDist
-  Run npm run build:dist:exe after updates.
+  Run npm run build:release after updates (MSI + portable zip under msi/).
 
 .PARAMETER Force
   Run npm install with --force and re-download the Electron binary.
@@ -38,87 +38,24 @@ function Write-UpdateLog {
     Write-Host $line
 }
 
-function Invoke-ProjectCommand {
-    param(
-        [string]$Label,
-        [string[]]$Command
-    )
-    Write-UpdateLog $Label
-    Push-Location $Root
-    try {
-        & $Command[0] @($Command[1..($Command.Length - 1)])
-        if ($LASTEXITCODE -ne 0) {
-            throw "$Label failed (exit $LASTEXITCODE)"
-        }
-    } finally {
-        Pop-Location
-    }
-}
-
-function Stop-AppServerIfRunning {
-    $stopBat = Join-Path $Root 'stop_server.bat'
-    if (-not (Test-Path $stopBat)) {
-        Write-UpdateLog 'stop_server.bat not found; skip stop'
-        return
-    }
-    Write-UpdateLog 'Stopping Whiteboard4Share server if running...'
-    & cmd.exe /d /c "`"$stopBat`" _inner _quiet" | Out-Null
-    $code = $LASTEXITCODE
-    if ($code -ne 0) {
-        throw "stop_server.bat failed (exit $code)"
-    }
-}
-
-function Update-GitSources {
-    if (-not (Test-Path (Join-Path $Root '.git'))) {
-        Write-UpdateLog 'Not a git repo; skip git pull'
-        return
-    }
-    $dirty = git -C $Root status --porcelain 2>$null
-    if ($dirty) {
-        Write-UpdateLog 'Git working tree has local changes; skip git pull'
-        return
-    }
-    Invoke-ProjectCommand 'git pull' @('git', '-C', $Root, 'pull', '--ff-only')
-}
-
-function Ensure-ElectronBinary {
-    $postinstall = Join-Path $Root 'scripts\postinstall-electron.mjs'
-    if (-not (Test-Path $postinstall)) {
-        Write-UpdateLog 'postinstall-electron.mjs not found; skip Electron binary check'
-        return
-    }
-    Invoke-ProjectCommand 'ensure Electron binary' @('node', $postinstall)
-}
-
-function Update-NpmStack {
-    if (-not (Test-Path (Join-Path $Root 'package.json'))) {
-        Write-UpdateLog 'package.json not found; skip npm'
-        return
-    }
-
-    if ($Force) {
-        Invoke-ProjectCommand 'npm install --force' @('npm', 'install', '--force')
-    } else {
-        Invoke-ProjectCommand 'npm install' @('npm', 'install')
-    }
-
-    Invoke-ProjectCommand 'npm update (semver ranges)' @('npm', 'update')
-    Ensure-ElectronBinary
-    Invoke-ProjectCommand 'npm run prepare:icon' @('npm', 'run', 'prepare:icon')
-    Invoke-ProjectCommand 'npm run build:electron' @('npm', 'run', 'build:electron')
-}
+$nodeArgs = @('scripts/update-all.mjs')
+if ($SkipGit) { $nodeArgs += '--skip-git' }
+if ($SkipNpm) { $nodeArgs += '--skip-npm' }
+if ($BuildDist) { $nodeArgs += '--release' }
+if ($Force) { $nodeArgs += '--force' }
 
 Write-UpdateLog '===== update-all started ====='
 Write-UpdateLog "Project root: $Root"
+Write-UpdateLog "Log file: $LogFile"
 
-Stop-AppServerIfRunning
-
-if (-not $SkipGit) { Update-GitSources }
-if (-not $SkipNpm) { Update-NpmStack }
-
-if ($BuildDist) {
-    Invoke-ProjectCommand 'npm run build:dist:exe' @('npm', 'run', 'build:dist:exe')
+Push-Location $Root
+try {
+    & node @nodeArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "update-all.mjs failed (exit $LASTEXITCODE)"
+    }
+} finally {
+    Pop-Location
 }
 
 Write-UpdateLog '===== update-all finished ====='

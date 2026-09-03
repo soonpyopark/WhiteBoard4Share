@@ -21,6 +21,9 @@ import {
   updateSettings,
 } from '../server/settingsService.ts';
 import { getAppRoot, getDefaultDataDir } from '../server/paths.ts';
+import { applyPortableUserData } from './portableUserData.ts';
+
+applyPortableUserData();
 
 const APP_ID = 'com.whiteboard4share.app';
 

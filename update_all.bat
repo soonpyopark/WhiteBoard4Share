@@ -64,6 +64,7 @@ echo  Root : %USB_ROOT%
 echo  Log  : data\logs\update-all.log
 echo.
 echo  Options: build force skip-git skip-npm
+echo  build  = npm run build:release (msi + zip)
 echo ============================================================
 echo.
 
