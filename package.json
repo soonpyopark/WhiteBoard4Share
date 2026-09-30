@@ -25,6 +25,7 @@
     "build:release": "node scripts/build-release.mjs",
     "update:all": "node scripts/update-all.mjs",
     "build:update_all": "update_all.bat _inner build",
+    "push:all": "git push origin && git push gitlab",
     "postinstall": "node scripts/postinstall-electron.mjs"
   },
   "dependencies": {

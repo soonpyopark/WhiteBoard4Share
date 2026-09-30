@@ -119,6 +119,13 @@ cd WhiteBoard4Share
 npm install
 ```
 
+GitHub와 GitLab을 함께 올리려면 `origin`(GitHub)과 `gitlab` 원격을 쓴 뒤 `npm run push:all` 또는 아래를 실행하세요.
+
+```bash
+git push origin
+git push gitlab
+```
+
 ### 개발 서버
 
 ```bash
