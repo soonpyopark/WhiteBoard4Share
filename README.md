@@ -5,7 +5,7 @@
 
 - **제작**: 청년안민규
 - **블로그**: [https://note4all.tistory.com](https://note4all.tistory.com)
-- **저장소**: [https://github.com/soonpyopark/WhiteBoard4Share](https://github.com/soonpyopark/WhiteBoard4Share)
+- **저장소**: [GitHub](https://github.com/soonpyopark/WhiteBoard4Share) · [GitLab](https://gitlab.aigov.go.kr/soonpyo/whiteboard4share)
 - **라이선스**: [GNU Affero General Public License v3.0](./LICENSE) (`AGPL-3.0-only`)
 
 ---
@@ -114,6 +114,7 @@ Keycloak SSO는 `.env.example`의 `KEYCLOAK_*` 설정을 참고하세요.
 
 ```bash
 git clone https://github.com/soonpyopark/WhiteBoard4Share.git
+# 또는: git clone https://gitlab.aigov.go.kr/soonpyo/whiteboard4share.git
 cd WhiteBoard4Share
 npm install
 ```
