@@ -182,7 +182,7 @@ USB용 폴더만 필요하면 `npm run build:dist:exe` (`exe/Whiteboard4Share-{v
 update_all.bat
 ```
 
-패키지·Electron latest 업데이트 후 MSI + zip 릴리스 빌드:
+직접 의존성·Electron·electron-builder를 npm `latest`로 맞춘 뒤 MSI + zip 릴리스 빌드:
 
 ```bash
 npm run build:update_all
@@ -193,7 +193,7 @@ npm run build:update_all
 | `build` | 업데이트 후 `npm run build:release` 실행 (msi + zip) |
 | `force` | `npm install --force` 및 Electron 바이너리 재확인 |
 | `skip-git` | `git pull` 생략 |
-| `skip-npm` | npm 설치·빌드 생략 |
+| `skip-npm` | npm 설치·latest 업데이트·빌드 생략 |
 
 로그: `data/logs/update-all.log`
 
@@ -203,7 +203,7 @@ npm run build:update_all
 npm run lint              # oxlint
 npm run electron:dev      # Electron 로컬 실행 (개발용)
 npm run build:release     # msi/ 에 MSI + portable zip
-npm run build:update_all  # 패키지·Electron latest 후 build:release
+npm run build:update_all  # 직접 의존성·Electron latest 후 build:release
 ```
 
 ---

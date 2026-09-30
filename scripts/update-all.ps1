@@ -7,7 +7,7 @@
   Skip git pull.
 
 .PARAMETER SkipNpm
-  Skip npm install/update and Electron latest.
+  Skip npm install, direct-dependency latest updates, and Electron latest.
 
 .PARAMETER BuildDist
   Run npm run build:release after updates (MSI + portable zip under msi/).

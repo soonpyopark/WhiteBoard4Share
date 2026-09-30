@@ -1,18 +1,9 @@
-import { createRequire } from 'node:module';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Server } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { getClientIpFromRequest, isIpAllowed } from './ipAllowlist.ts';
 import { loadSettings } from './settingsService.ts';
-
-const require = createRequire(import.meta.url);
-const { setupWSConnection } = require('y-websocket/bin/utils') as {
-  setupWSConnection: (
-    conn: import('ws').WebSocket,
-    req: IncomingMessage,
-    opts?: { docName?: string; gc?: boolean },
-  ) => void;
-};
+import { setupWSConnection } from './yjsWsConnection.ts';
 
 export const YJS_WS_PATH =
   process.env.VITE_YJS_WS_PATH?.trim() ||

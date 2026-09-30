@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Update npm dependencies and pin Electron to npm `latest`.
- * Other packages stay within package.json semver ranges (`npm update`).
+ * Update every direct npm dependency (and Electron) to npm `latest`.
+ * Transitive packages follow the resulting lockfile and package.json overrides.
  *
  * Options:
  *   --skip-git
@@ -103,6 +103,31 @@ function assertElectronRuns(expectedVersion) {
   console.log(`[update-all] Electron runs: ${out}`);
 }
 
+async function readPackageJson() {
+  return JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+}
+
+async function updateDirectDependenciesLatest() {
+  const pkg = await readPackageJson();
+  const prod = Object.keys(pkg.dependencies ?? {});
+  const dev = Object.keys(pkg.devDependencies ?? {}).filter(
+    (name) => name !== 'electron' && name !== 'electron-builder',
+  );
+
+  if (prod.length > 0) {
+    run('dependencies @latest', 'npm', ['install', ...prod.map((name) => `${name}@latest`), '--save']);
+  }
+  if (dev.length > 0) {
+    run('devDependencies @latest', 'npm', [
+      'install',
+      ...dev.map((name) => `${name}@latest`),
+      '--save-dev',
+    ]);
+  }
+
+  await updateElectronLatest();
+}
+
 async function updateElectronLatest() {
   const electronVersion = queryNpmVersion('electron');
   const builderVersion = queryNpmVersion('electron-builder');
@@ -165,8 +190,7 @@ async function main() {
     } else {
       run('npm install', 'npm', ['install']);
     }
-    run('npm update', 'npm', ['update']);
-    await updateElectronLatest();
+    await updateDirectDependenciesLatest();
     run('prepare icon', 'npm', ['run', 'prepare:icon']);
     run('build electron', 'npm', ['run', 'build:electron']);
   }
