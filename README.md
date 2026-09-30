@@ -6,6 +6,7 @@
 - **제작**: 청년안민규
 - **블로그**: [https://note4all.tistory.com](https://note4all.tistory.com)
 - **저장소**: [GitLab](https://gitlab.aigov.go.kr/soonpyo/whiteboard4share) (메인) · [GitHub](https://github.com/soonpyopark/WhiteBoard4Share) (미러)
+- **릴리스**: [https://github.com/soonpyopark/WhiteBoard4Share/releases](https://github.com/soonpyopark/WhiteBoard4Share/releases)
 - **라이선스**: [GNU Affero General Public License v3.0](./LICENSE) (`AGPL-3.0-only`)
 
 ---
