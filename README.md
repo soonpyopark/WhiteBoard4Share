@@ -5,7 +5,7 @@
 
 - **제작**: 청년안민규
 - **블로그**: [https://note4all.tistory.com](https://note4all.tistory.com)
-- **저장소**: [GitHub](https://github.com/soonpyopark/WhiteBoard4Share) · [GitLab](https://gitlab.aigov.go.kr/soonpyo/whiteboard4share)
+- **저장소**: [GitLab](https://gitlab.aigov.go.kr/soonpyo/whiteboard4share) (메인) · [GitHub](https://github.com/soonpyopark/WhiteBoard4Share) (미러)
 - **라이선스**: [GNU Affero General Public License v3.0](./LICENSE) (`AGPL-3.0-only`)
 
 ---
@@ -113,17 +113,17 @@ Keycloak SSO는 `.env.example`의 `KEYCLOAK_*` 설정을 참고하세요.
 ### 설치
 
 ```bash
-git clone https://github.com/soonpyopark/WhiteBoard4Share.git
-# 또는: git clone https://gitlab.aigov.go.kr/soonpyo/whiteboard4share.git
+git clone https://gitlab.aigov.go.kr/soonpyo/whiteboard4share.git
+# 미러: git clone https://github.com/soonpyopark/WhiteBoard4Share.git
 cd WhiteBoard4Share
 npm install
 ```
 
-GitHub와 GitLab을 함께 올리려면 `origin`(GitHub)과 `gitlab` 원격을 쓴 뒤 `npm run push:all` 또는 아래를 실행하세요.
+`origin`은 GitLab(메인), `github`는 GitHub(미러)입니다. 함께 올리려면 `npm run push:all` 또는 아래를 실행하세요.
 
 ```bash
 git push origin
-git push gitlab
+git push github
 ```
 
 ### 개발 서버
